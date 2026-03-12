@@ -3,4 +3,5 @@ __pycache__/
 .pytest_cache/
 agentkit.local.yaml
 test_outputs/
+runs/
 BigBanana-AI-Director-main-2/*

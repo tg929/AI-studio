@@ -16,6 +16,44 @@ Future role:
 
 - Likely becomes the workflow entry shell or delegates to workflow modules
 
+### `extract_assets.py`
+
+Current role:
+
+- CLI entrypoint for the first workflow node
+- Runs script preprocessing and asset extraction
+
+### `pipeline/runtime.py`
+
+Current role:
+
+- Loads local text-model runtime config from `agentkit.local.yaml`
+- Builds the Ark client for workflow nodes
+
+### `pipeline/asset_extraction.py`
+
+Current role:
+
+- Normalizes script text
+- Writes input artifacts
+- Calls the text model
+- Normalizes observed model field aliases
+- Validates the result against the asset schema
+- Writes `asset_registry.json`
+
+### `schemas/asset_registry.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `asset_registry.json`
+- Enforces ID format and cross-reference integrity
+
+### `prompts/asset_extraction.py`
+
+Current role:
+
+- Stores the production prompt template for asset extraction
+
 ### `agentkit.yaml`
 
 Current role:
@@ -63,30 +101,43 @@ Current role:
 
 ## Planned Runtime Structure
 
-The exact module layout is not implemented yet, but the current target shape is:
+The module layout is now partially implemented:
 
-- `workflow/` or `pipeline/`
-  - script preprocessing
-  - asset extraction
-  - art direction
-  - asset prompt generation
-  - asset image generation
-  - storyboard generation
-  - shot board stitching
-  - shot video generation
-  - final video concatenation
+- `pipeline/`
+  - `runtime.py`
+  - `asset_extraction.py`
+  - later: art direction, asset prompts, image generation, storyboard, board stitching, video generation, final concat
 
 - `prompts/`
-  - asset extraction prompt
-  - asset image prompt
-  - storyboard prompt
-  - video prompt
+  - `asset_extraction.py`
+  - later: asset image prompt, storyboard prompt, video prompt
 
 - `schemas/`
-  - JSON schema or Pydantic models for stage contracts
+  - `asset_registry.py`
+  - later: style bible, storyboard, video job schemas
 
 - `runs/`
   - generated outputs per execution
+
+## Current Run Artifacts
+
+The first implemented node writes:
+
+- `runs/<timestamp>/01_input/script_clean.txt`
+- `runs/<timestamp>/01_input/script_clean.json`
+- `runs/<timestamp>/02_assets/asset_extraction_request.json`
+- `runs/<timestamp>/02_assets/asset_extraction_response.json`
+- `runs/<timestamp>/02_assets/asset_registry.json`
+
+## Model Compatibility Note
+
+The current text model rejected `response_format={"type":"json_object"}`.
+
+The implemented path therefore uses:
+
+- strict prompt instructions
+- deterministic field alias normalization for known deviations
+- Pydantic validation as the final contract gate
 
 ## Contract Philosophy
 

@@ -17,7 +17,7 @@ Validation:
 
 ## Step 1: Asset Schema and Asset Extraction Prompt
 
-Status: drafted
+Status: done
 
 Goal:
 
@@ -35,6 +35,8 @@ Validation:
 - The prompt can produce valid JSON matching the schema.
 
 ## Step 2: Implement Script Preprocessing and Asset Extraction Node
+
+Status: done
 
 Goal:
 
@@ -54,6 +56,8 @@ Validation:
 
 ## Step 3: Art Direction and Asset Prompt Generation
 
+Status: next
+
 Goal:
 
 - Generate a project-level style bible.
@@ -71,6 +75,8 @@ Validation:
 
 ## Step 4: Asset Image Generation
 
+Status: pending
+
 Goal:
 
 - Generate labeled asset images for characters, scenes, and props.
@@ -86,6 +92,8 @@ Validation:
 - Naming and labeling are consistent.
 
 ## Step 5: Storyboard Generation
+
+Status: pending
 
 Goal:
 
@@ -105,6 +113,8 @@ Validation:
 
 ## Step 6: Shot Reference Board Generation
 
+Status: pending
+
 Goal:
 
 - Build one stitched asset board image for each shot.
@@ -121,6 +131,8 @@ Validation:
 
 ## Step 7: Shot Video Generation
 
+Status: pending
+
 Goal:
 
 - Generate one video per shot using `shot prompt + stitched board image`.
@@ -136,6 +148,8 @@ Validation:
 - Output duration is close to 10 seconds.
 
 ## Step 8: Final Video Concatenation
+
+Status: pending
 
 Goal:
 

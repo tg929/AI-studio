@@ -1,2 +1,4 @@
 veadk-python
 agentkit-sdk-python
+pydantic
+PyYAML

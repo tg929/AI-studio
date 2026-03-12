@@ -15,22 +15,26 @@ Last updated: 2026-03-12
 - Added local project memory files inspired by `vibe-coding`.
 - Finalized the V1 `asset_registry.json` schema draft.
 - Drafted the project-specific asset extraction system prompt.
+- Implemented the first Python workflow node for script preprocessing and asset extraction.
+- Added explicit Pydantic validation for `asset_registry.json`.
+- Ran the first real extraction against `01-陨落的天才.txt` successfully.
 
 ## Current Phase
 
-Design and planning.
+Early workflow implementation.
 
-The project is not yet in production workflow implementation. The current focus is:
+The project now has:
 
 - workflow schema design
-- system prompt design
-- memory-bank setup
+- asset extraction prompt design
+- one working Python extraction node
+- project memory-bank setup
 
 ## Next Step
 
-- Validate the asset schema against `01-陨落的天才.txt`
-- Refine the asset extraction prompt after the first extraction run
-- Then implement the first Python workflow node
+- Review the first extracted `asset_registry.json`
+- Implement style-bible generation
+- Implement asset image prompt generation
 
 ## Known Constraints
 
@@ -44,3 +48,5 @@ The project is not yet in production workflow implementation. The current focus 
 
 - `agentkit.local.yaml` contains local model settings and must remain uncommitted.
 - `BigBanana-AI-Director-main-2/` is gitignored here and used only as a local reference copy.
+- The current text model does not support `response_format={"type":"json_object"}`.
+- The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
