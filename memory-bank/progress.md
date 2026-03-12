@@ -18,6 +18,9 @@ Last updated: 2026-03-12
 - Implemented the first Python workflow node for script preprocessing and asset extraction.
 - Added explicit Pydantic validation for `asset_registry.json`.
 - Ran the first real extraction against `01-陨落的天才.txt` successfully.
+- Implemented the `style_bible.json` generation node.
+- Added explicit Pydantic validation for `style_bible.json`.
+- Ran the first real style-bible generation successfully and saved it under the existing run directory.
 
 ## Current Phase
 
@@ -28,13 +31,13 @@ The project now has:
 - workflow schema design
 - asset extraction prompt design
 - one working Python extraction node
+- one working Python style-bible node
 - project memory-bank setup
 
 ## Next Step
 
-- Review the first extracted `asset_registry.json`
-- Implement style-bible generation
 - Implement asset image prompt generation
+- Then generate labeled asset images
 
 ## Known Constraints
 
@@ -50,3 +53,4 @@ The project now has:
 - `BigBanana-AI-Director-main-2/` is gitignored here and used only as a local reference copy.
 - The current text model does not support `response_format={"type":"json_object"}`.
 - The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
+- The style-bible node uses the same prompt-constrained JSON + local schema validation path.

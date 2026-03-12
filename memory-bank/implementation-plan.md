@@ -56,7 +56,7 @@ Validation:
 
 ## Step 3: Art Direction and Asset Prompt Generation
 
-Status: next
+Status: in_progress
 
 Goal:
 
@@ -72,6 +72,11 @@ Validation:
 
 - Prompt outputs are complete for all assets.
 - Style directions are globally coherent.
+
+Current state:
+
+- `style_bible.json` generation is implemented and verified.
+- `asset_prompts.json` generation is the next sub-step in this stage.
 
 ## Step 4: Asset Image Generation
 

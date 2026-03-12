@@ -13,6 +13,7 @@ from prompts.asset_extraction import (
     build_asset_extraction_user_prompt,
 )
 from schemas.asset_registry import AssetRegistry
+from pipeline.io import dump_model, extract_text_content, write_json
 from pipeline.runtime import TextModelConfig, build_text_client
 
 
@@ -40,30 +41,6 @@ def build_run_artifacts(output_root: Path) -> AssetExtractionArtifacts:
     input_dir.mkdir(parents=True, exist_ok=True)
     asset_dir.mkdir(parents=True, exist_ok=True)
     return AssetExtractionArtifacts(run_dir=run_dir, input_dir=input_dir, asset_dir=asset_dir)
-
-
-def write_json(path: Path, payload: Any) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def dump_model(model: Any) -> Any:
-    if hasattr(model, "model_dump"):
-        return model.model_dump(mode="json", exclude_none=True)
-    return model
-
-
-def extract_text_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                parts.append(str(item.get("text", "")))
-            elif hasattr(item, "type") and getattr(item, "type", None) == "text":
-                parts.append(str(getattr(item, "text", "")))
-        return "\n".join(part for part in parts if part)
-    return str(content)
 
 
 def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
