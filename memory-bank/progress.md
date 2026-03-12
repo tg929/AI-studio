@@ -13,6 +13,8 @@ Last updated: 2026-03-12
 - Reviewed Volcano Engine AgentKit quickstart and VeADK docs.
 - Analyzed `BigBanana-AI-Director-main-2` for prompt/workflow references.
 - Added local project memory files inspired by `vibe-coding`.
+- Finalized the V1 `asset_registry.json` schema draft.
+- Drafted the project-specific asset extraction system prompt.
 
 ## Current Phase
 
@@ -26,8 +28,9 @@ The project is not yet in production workflow implementation. The current focus 
 
 ## Next Step
 
-- Finalize `asset_registry.json` schema
-- Draft the asset extraction system prompt
+- Validate the asset schema against `01-陨落的天才.txt`
+- Refine the asset extraction prompt after the first extraction run
+- Then implement the first Python workflow node
 
 ## Known Constraints
 

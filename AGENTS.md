@@ -10,7 +10,9 @@ Read these files before doing substantial work in this repository:
 If the task is about prompts, workflow design, or model orchestration, also read:
 
 5. `memory-bank/prompt-strategy.md`
-6. `memory-bank/open-questions.md`
+6. `memory-bank/asset-registry-schema.md`
+7. `memory-bank/asset-extraction-system-prompt.md`
+8. `memory-bank/open-questions.md`
 
 Project rules:
 

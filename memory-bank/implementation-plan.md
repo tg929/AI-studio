@@ -17,7 +17,7 @@ Validation:
 
 ## Step 1: Asset Schema and Asset Extraction Prompt
 
-Status: next
+Status: drafted
 
 Goal:
 

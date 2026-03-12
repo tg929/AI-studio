@@ -4,7 +4,6 @@ These questions are still unresolved and should be reviewed before major impleme
 
 ## Schema
 
-- What is the final field set for `asset_registry.json`?
 - How much biography detail should character assets carry in V1?
 - Should scenes be pure environment assets, or can they include implied human traces?
 
