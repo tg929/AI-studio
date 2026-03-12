@@ -21,6 +21,9 @@ Last updated: 2026-03-12
 - Implemented the `style_bible.json` generation node.
 - Added explicit Pydantic validation for `style_bible.json`.
 - Ran the first real style-bible generation successfully and saved it under the existing run directory.
+- Implemented the `asset_prompts.json` generation node.
+- Added explicit Pydantic validation for `asset_prompts.json`.
+- Ran the first real asset-prompt generation successfully and saved it under the existing run directory.
 
 ## Current Phase
 
@@ -32,12 +35,13 @@ The project now has:
 - asset extraction prompt design
 - one working Python extraction node
 - one working Python style-bible node
+- one working Python asset-prompts node
 - project memory-bank setup
 
 ## Next Step
 
-- Implement asset image prompt generation
-- Then generate labeled asset images
+- Generate labeled asset images from `asset_prompts.json`
+- Then build an `asset_images_manifest.json`
 
 ## Known Constraints
 
@@ -54,3 +58,4 @@ The project now has:
 - The current text model does not support `response_format={"type":"json_object"}`.
 - The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
 - The style-bible node uses the same prompt-constrained JSON + local schema validation path.
+- The asset-prompts node uses the same prompt-constrained JSON + local schema validation path.

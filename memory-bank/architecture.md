@@ -56,6 +56,15 @@ Current role:
 - Reads a validated `asset_registry.json`
 - Generates `style_bible.json` into the same run directory
 
+### `generate_asset_prompts.py`
+
+Current role:
+
+- CLI entrypoint for the asset-prompt node
+- Reads a validated `style_bible.json`
+- Resolves the matching `asset_registry.json`
+- Generates `asset_prompts.json` into the same run directory
+
 ### `pipeline/style_bible.py`
 
 Current role:
@@ -66,6 +75,19 @@ Current role:
 - Normalizes observed field aliases and list-vs-string differences
 - Validates the result against the style-bible schema
 - Writes `style_bible.json`
+
+### `pipeline/asset_prompts.py`
+
+Current role:
+
+- Loads and validates `style_bible.json`
+- Resolves and validates the matching `asset_registry.json`
+- Builds the asset-prompt request payload
+- Calls the text model
+- Normalizes observed prompt field aliases
+- Deterministically fills non-model metadata such as labels, aspect ratios, and negative prompts
+- Validates the final result against the asset-prompts schema
+- Writes `asset_prompts.json`
 
 ### `schemas/asset_registry.py`
 
@@ -81,6 +103,13 @@ Current role:
 - Defines the strict Pydantic schema for `style_bible.json`
 - Validates the global visual-style contract for downstream prompt generation
 
+### `schemas/asset_prompts.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `asset_prompts.json`
+- Validates per-type prompt metadata and ID ordering
+
 ### `prompts/asset_extraction.py`
 
 Current role:
@@ -92,6 +121,12 @@ Current role:
 Current role:
 
 - Stores the production prompt template for style-bible generation
+
+### `prompts/asset_prompts.py`
+
+Current role:
+
+- Stores the production prompt template for text-model generation of asset image prompts
 
 ### `agentkit.yaml`
 
@@ -147,16 +182,19 @@ The module layout is now partially implemented:
   - `io.py`
   - `asset_extraction.py`
   - `style_bible.py`
-  - later: asset prompts, image generation, storyboard, board stitching, video generation, final concat
+  - `asset_prompts.py`
+  - later: image generation, storyboard, board stitching, video generation, final concat
 
 - `prompts/`
   - `asset_extraction.py`
   - `style_bible.py`
-  - later: asset image prompt, storyboard prompt, video prompt
+  - `asset_prompts.py`
+  - later: storyboard prompt, video prompt
 
 - `schemas/`
   - `asset_registry.py`
   - `style_bible.py`
+  - `asset_prompts.py`
   - later: storyboard, video job schemas
 
 - `runs/`
@@ -174,6 +212,9 @@ The implemented nodes now write:
 - `runs/<timestamp>/03_style/style_bible_request.json`
 - `runs/<timestamp>/03_style/style_bible_response.json`
 - `runs/<timestamp>/03_style/style_bible.json`
+- `runs/<timestamp>/04_asset_prompts/asset_prompts_request.json`
+- `runs/<timestamp>/04_asset_prompts/asset_prompts_response.json`
+- `runs/<timestamp>/04_asset_prompts/asset_prompts.json`
 
 ## Model Compatibility Note
 

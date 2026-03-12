@@ -56,7 +56,7 @@ Validation:
 
 ## Step 3: Art Direction and Asset Prompt Generation
 
-Status: in_progress
+Status: done
 
 Goal:
 
@@ -76,11 +76,11 @@ Validation:
 Current state:
 
 - `style_bible.json` generation is implemented and verified.
-- `asset_prompts.json` generation is the next sub-step in this stage.
+- `asset_prompts.json` generation is implemented and verified.
 
 ## Step 4: Asset Image Generation
 
-Status: pending
+Status: next
 
 Goal:
 
