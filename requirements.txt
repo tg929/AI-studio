@@ -2,3 +2,5 @@ veadk-python
 agentkit-sdk-python
 pydantic
 PyYAML
+httpx
+Pillow
