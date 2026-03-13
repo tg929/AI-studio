@@ -1,4 +1,4 @@
-"""Pydantic schema for asset_prompts.json."""
+"""Pydantic schema for asset_images_manifest.json."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import model_validator
 
+from schemas.asset_prompts import AssetAspectRatio
 from schemas.asset_registry import CharacterId, PropId, SceneId, StrictModel
 
 
@@ -15,60 +16,59 @@ def _validate_sequential_ids(ids: list[str], prefix: str) -> None:
         raise ValueError(f"{prefix} IDs must be sequential: expected {expected}, got {ids}")
 
 
-AssetAspectRatio = Literal["16:9", "9:16", "1:1"]
-
-
-class CharacterAssetPrompt(StrictModel):
+class CharacterAssetImage(StrictModel):
     id: CharacterId
     name: str
     label_text: str
-    prompt: str
-    negative_prompt: str
     aspect_ratio: AssetAspectRatio
-    framing: str
-    background_treatment: str
-    generation_intent: str
-    card_layout_notes: str
+    requested_size: str
+    render_prompt: str
+    negative_prompt: str
+    raw_image_path: str
+    local_image_path: str
+    raw_response_path: str
+    remote_url: str
 
 
-class SceneAssetPrompt(StrictModel):
+class SceneAssetImage(StrictModel):
     id: SceneId
     name: str
     label_text: str
-    prompt: str
-    negative_prompt: str
     aspect_ratio: AssetAspectRatio
-    framing: str
-    figure_policy: Literal["no_identifiable_characters"]
-    generation_intent: str
-    card_layout_notes: str
+    requested_size: str
+    render_prompt: str
+    negative_prompt: str
+    raw_image_path: str
+    local_image_path: str
+    raw_response_path: str
+    remote_url: str
 
 
-class PropAssetPrompt(StrictModel):
+class PropAssetImage(StrictModel):
     id: PropId
     name: str
     label_text: str
-    prompt: str
-    negative_prompt: str
     aspect_ratio: AssetAspectRatio
-    framing: str
-    isolation_rules: str
-    generation_intent: str
-    card_layout_notes: str
+    requested_size: str
+    render_prompt: str
+    negative_prompt: str
+    raw_image_path: str
+    local_image_path: str
+    raw_response_path: str
+    remote_url: str
 
 
-class AssetPrompts(StrictModel):
+class AssetImagesManifest(StrictModel):
     schema_version: Literal["1.0"]
     source_script_name: str
     title: str
-    visual_style: str
-    consistency_anchors: str
-    characters: list[CharacterAssetPrompt]
-    scenes: list[SceneAssetPrompt]
-    props: list[PropAssetPrompt]
+    image_model: str
+    characters: list[CharacterAssetImage]
+    scenes: list[SceneAssetImage]
+    props: list[PropAssetImage]
 
     @model_validator(mode="after")
-    def validate_prompt_sets(self) -> "AssetPrompts":
+    def validate_images(self) -> "AssetImagesManifest":
         _validate_sequential_ids([item.id for item in self.characters], "char")
         _validate_sequential_ids([item.id for item in self.scenes], "scene")
         _validate_sequential_ids([item.id for item in self.props], "prop")
