@@ -128,3 +128,16 @@ The project now has:
   - do local prompt analysis first
   - only rerun the image stage when the expected improvement is concrete
   - keep all stage outputs for the same experiment under one `runs/runN` directory
+- Upstream character extraction has now been hardened with new structured fields:
+  - `visual_profile`
+  - `costume_profile`
+  - `visual_identity_lock`
+- `extract_assets.py` now supports `--run-dir` so an existing run can be continued in place instead of forcing a new `runN`.
+- `run10/02_assets/asset_registry.json` has been regenerated in place using the upgraded extraction prompt and schema.
+- Result of the new `run10/02_assets` extraction:
+  - female characters are still present and explicitly marked
+  - the new character records contain stronger visual anchors for gender, age stage, hair, clothing, and anti-drift rules
+  - some underspecified details are still over-inferred by the text model, especially for `char_002` costume colors / hairstyle
+- Important run-state note:
+  - `run10/03_style`, `run10/04_asset_prompts`, and `run10/05_asset_images` are now derived from the old `run10/02_assets`
+  - they should be treated as stale until we decide to rerun downstream stages

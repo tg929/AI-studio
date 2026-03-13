@@ -58,6 +58,14 @@ def build_run_artifacts(output_root: Path) -> AssetExtractionArtifacts:
     return AssetExtractionArtifacts(run_dir=run_dir, input_dir=input_dir, asset_dir=asset_dir)
 
 
+def build_existing_run_artifacts(run_dir: Path) -> AssetExtractionArtifacts:
+    input_dir = run_dir / "01_input"
+    asset_dir = run_dir / "02_assets"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    return AssetExtractionArtifacts(run_dir=run_dir, input_dir=input_dir, asset_dir=asset_dir)
+
+
 def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
     if normalized.get("schema_version") == "1.0.0":
@@ -83,12 +91,42 @@ def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
             character["identity_markers"] = [marker] if marker else []
         relationships = character.get("relationship_targets")
         if not isinstance(relationships, list):
-            continue
+            relationships = []
+            character["relationship_targets"] = relationships
         for relationship in relationships:
             if "character_id" not in relationship and "target_id" in relationship:
                 relationship["character_id"] = relationship.pop("target_id")
             if "description" not in relationship:
                 relationship["description"] = relationship.get("relation", "")
+
+        visual_profile = character.get("visual_profile")
+        if not isinstance(visual_profile, dict):
+            visual_profile = {}
+            character["visual_profile"] = visual_profile
+        silhouette_keywords = visual_profile.get("silhouette_keywords")
+        if isinstance(silhouette_keywords, str):
+            keyword = silhouette_keywords.strip()
+            visual_profile["silhouette_keywords"] = [keyword] if keyword else []
+
+        costume_profile = character.get("costume_profile")
+        if not isinstance(costume_profile, dict):
+            costume_profile = {}
+            character["costume_profile"] = costume_profile
+        for list_key in ("secondary_colors", "trim_details", "accessories"):
+            value = costume_profile.get(list_key)
+            if isinstance(value, str):
+                item = value.strip()
+                costume_profile[list_key] = [item] if item else []
+
+        visual_identity_lock = character.get("visual_identity_lock")
+        if not isinstance(visual_identity_lock, dict):
+            visual_identity_lock = {}
+            character["visual_identity_lock"] = visual_identity_lock
+        for list_key in ("required_features", "forbidden_drifts"):
+            value = visual_identity_lock.get(list_key)
+            if isinstance(value, str):
+                item = value.strip()
+                visual_identity_lock[list_key] = [item] if item else []
 
     return normalized
 
@@ -109,6 +147,7 @@ def extract_asset_registry(
     script_path: Path,
     model_config: TextModelConfig,
     output_root: Path,
+    run_dir: Path | None = None,
     dry_run: bool = False,
 ) -> AssetExtractionArtifacts:
     raw_text = script_path.read_text(encoding="utf-8")
@@ -116,7 +155,7 @@ def extract_asset_registry(
     if not normalized_text:
         raise ValueError(f"Script file is empty after normalization: {script_path}")
 
-    artifacts = build_run_artifacts(output_root)
+    artifacts = build_existing_run_artifacts(run_dir) if run_dir is not None else build_run_artifacts(output_root)
     script_clean_payload = create_script_clean_payload(script_path, normalized_text)
     script_clean_text_path = artifacts.input_dir / "script_clean.txt"
     script_clean_json_path = artifacts.input_dir / "script_clean.json"

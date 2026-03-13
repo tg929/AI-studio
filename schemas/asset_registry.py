@@ -35,6 +35,35 @@ class RelationshipTarget(StrictModel):
     description: str
 
 
+class VisualProfile(StrictModel):
+    age_stage: str
+    body_build: str
+    face_type: str
+    skin_tone: str
+    eye_impression: str
+    hair_color: str
+    hair_length: str
+    hair_style: str
+    facial_hair: str
+    silhouette_keywords: list[str]
+
+
+class CostumeProfile(StrictModel):
+    costume_type: str
+    primary_color: str
+    secondary_colors: list[str]
+    material: str
+    layer_structure: str
+    trim_details: list[str]
+    accessories: list[str]
+    footwear: str
+
+
+class VisualIdentityLock(StrictModel):
+    required_features: list[str]
+    forbidden_drifts: list[str]
+
+
 class CharacterAsset(StrictModel):
     id: CharacterId
     name: str
@@ -52,6 +81,9 @@ class CharacterAsset(StrictModel):
     signature_prop_ids: list[PropId]
     default_scene_ids: list[SceneId]
     first_appearance_segment_id: SegmentId
+    visual_profile: VisualProfile
+    costume_profile: CostumeProfile
+    visual_identity_lock: VisualIdentityLock
 
 
 class SceneAsset(StrictModel):

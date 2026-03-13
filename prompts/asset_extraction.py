@@ -81,14 +81,78 @@ Each character object must contain:
 - `signature_prop_ids`
 - `default_scene_ids`
 - `first_appearance_segment_id`
+- `visual_profile`
+- `costume_profile`
+- `visual_identity_lock`
 
 Additional rules:
 - `aliases` stores alternative names, titles, or forms of address from the script
 - `role_type` must be one of `main`, `supporting`, `minor`
+- `gender` should use simple Chinese values: `男`, `女`, or `""`
 - `personality_traits` must be an array of short phrases
 - `must_keep_features` stores only the most critical non-drifting visual traits
 - `relationship_targets` must reference characters by character ID
 - `signature_prop_ids` may only reference extracted prop IDs
+- `visual_profile`, `costume_profile`, and `visual_identity_lock` are mandatory and must be conservative, script-faithful, and visually useful
+
+#### character.visual_profile
+
+This object must contain:
+- `age_stage`
+- `body_build`
+- `face_type`
+- `skin_tone`
+- `eye_impression`
+- `hair_color`
+- `hair_length`
+- `hair_style`
+- `facial_hair`
+- `silhouette_keywords`
+
+Rules:
+- use short visual phrases
+- `silhouette_keywords` must be an array of short phrases
+- if the script does not explicitly provide a detail, keep it broad and conservative
+- do not invent gendered features that contradict the script
+- if exact numeric age is not explicit, keep `age` broad and conservative instead of guessing a precise number
+- do not turn a broad youth description into a precise haircut or face-shape spec unless the script strongly supports it
+- `facial_hair` must be based only on script evidence; if absent, use `""`
+
+#### character.costume_profile
+
+This object must contain:
+- `costume_type`
+- `primary_color`
+- `secondary_colors`
+- `material`
+- `layer_structure`
+- `trim_details`
+- `accessories`
+- `footwear`
+
+Rules:
+- use broad but visually actionable clothing terms
+- do not invent ornate costume systems if the script only gives simple clothing clues
+- `secondary_colors`, `trim_details`, and `accessories` must be arrays
+- preserve strong costume anchors such as robe vs dress, dark purple vs plain grey, black-gold trim, family emblems, etc.
+- if the script does not explicitly state a clothing color, leave `primary_color` as `""`
+- if the script does not explicitly support a trim, accessory, or footwear detail, leave it empty instead of inventing one
+
+#### character.visual_identity_lock
+
+This object must contain:
+- `required_features`
+- `forbidden_drifts`
+
+Rules:
+- `required_features` stores the minimum visual anchors that must survive downstream image generation
+- `forbidden_drifts` stores the most likely wrong directions we must prevent later
+- `forbidden_drifts` must be conservative and only derived from clear script facts
+- do not add stylistic or emotional prohibitions that are not directly relevant to visual mis-generation
+- good examples:
+  - if the character is a teenage girl in a purple dress, forbid drifting into male disciple clothing
+  - if the character is a teenage boy in family disciple clothing, forbid drifting into feminine dress
+  - if the character is a middle-aged male steward, forbid drifting into teenage appearance
 
 ### 2. scenes
 
@@ -194,6 +258,10 @@ Hard requirements:
   - `description`
 - do not use `target_id` inside `relationship_targets`
 - `description` must not be omitted
+- each character must include fully populated:
+  - `visual_profile`
+  - `costume_profile`
+  - `visual_identity_lock`
 
 ## Output Rules
 
@@ -213,6 +281,7 @@ The downstream pipeline should be able to use your output directly without manua
 If a visual detail is uncertain, be conservative.
 If you detect duplicated assets, merge them.
 If forms of address are inconsistent, normalize them through `aliases`.
+When extracting character identity, prefer structured visual anchors over vague literary summaries.
 
 Final output: return only the JSON object for `asset_registry.json`."""
 

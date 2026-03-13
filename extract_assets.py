@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Prepare inputs and validate config without calling the model.",
     )
+    parser.add_argument(
+        "--run-dir",
+        default="",
+        help="Reuse an existing run directory instead of creating a new runN directory.",
+    )
     return parser.parse_args()
 
 
@@ -41,6 +46,7 @@ def main() -> int:
     script_path = Path(args.script).resolve()
     config_path = Path(args.config).resolve()
     output_root = Path(args.output_root).resolve()
+    run_dir = Path(args.run_dir).resolve() if args.run_dir else None
 
     if not script_path.exists():
         raise FileNotFoundError(f"Script file not found: {script_path}")
@@ -52,6 +58,7 @@ def main() -> int:
         script_path=script_path,
         model_config=model_config,
         output_root=output_root,
+        run_dir=run_dir,
         dry_run=args.dry_run,
     )
 
