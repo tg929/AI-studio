@@ -13,6 +13,8 @@ from schemas.asset_prompts import AssetPrompts
 from schemas.asset_registry import AssetRegistry, CharacterAsset, PropAsset, SceneAsset
 from schemas.style_bible import StyleBible
 
+ASSET_REFERENCE_ASPECT_RATIO = "16:9"
+
 
 @dataclass(frozen=True, slots=True)
 class AssetPromptArtifacts:
@@ -176,20 +178,140 @@ def ensure_exact_ids(prompt_map: dict[str, str], expected_ids: list[str], group_
 def build_negative_prompt(style_bible: StyleBible, asset_type: str) -> str:
     shared = list(style_bible.negative_keywords)
     if asset_type == "character":
-        shared.extend(["多人同框", "遮挡面部", "额外文字", "水印"])
+        shared.extend(
+            [
+                "multiple characters in one frame",
+                "extra person",
+                "occluded face",
+                "Chinese characters",
+                "English letters",
+                "serial numbers",
+                "CREATE ONE",
+                "headline text",
+                "small annotation text",
+                "page number",
+                "corner tag",
+                "sidebar",
+                "gray shadow block",
+                "gradient strip",
+                "vertical color bar",
+                "color swatch",
+                "mockup frame",
+                "magazine layout",
+                "infographic template",
+                "UI panel",
+                "QR code",
+                "logo",
+                "watermark",
+                "signature",
+                "text",
+                "letters",
+                "numbers",
+                "caption",
+                "sidebar",
+                "gradient bar",
+                "color swatch",
+                "magazine layout",
+                "infographic template",
+                "mockup frame",
+            ]
+        )
     elif asset_type == "scene":
-        shared.extend(["人物特写", "可辨识主角", "额外文字", "水印"])
+        shared.extend(
+            [
+                "person",
+                "crowd",
+                "extras",
+                "attendant",
+                "passerby",
+                "silhouette",
+                "tiny distant figures",
+                "identifiable main character",
+                "Chinese characters",
+                "English letters",
+                "serial numbers",
+                "CREATE ONE",
+                "headline text",
+                "small annotation text",
+                "page number",
+                "corner tag",
+                "sidebar",
+                "gradient strip",
+                "color swatch",
+                "architectural plate",
+                "infographic template",
+                "UI panel",
+                "QR code",
+                "logo",
+                "watermark",
+                "text",
+                "letters",
+                "numbers",
+                "caption",
+                "title block",
+                "page number",
+                "gradient bar",
+                "architectural plate",
+                "infographic template",
+            ]
+        )
     else:
-        shared.extend(["人物手持", "人体肢体", "重复道具", "额外文字", "水印"])
-    return "，".join(shared)
+        shared.extend(
+            [
+                "person holding object",
+                "human limbs",
+                "wearing demo",
+                "duplicate props",
+                "Chinese characters",
+                "English letters",
+                "serial numbers",
+                "CREATE ONE",
+                "headline text",
+                "small annotation text",
+                "page number",
+                "corner tag",
+                "view labels",
+                "abstract placeholder circle",
+                "empty wireframe diagram",
+                "structural sketch",
+                "fake line drawing",
+                "hand-holding demo",
+                "wearing demo image",
+                "engraved letters",
+                "readable runes",
+                "inscription",
+                "name engraving",
+                "product catalog layout",
+                "manual template",
+                "UI panel",
+                "QR code",
+                "logo",
+                "watermark",
+                "text",
+                "letters",
+                "numbers",
+                "caption",
+                "title block",
+                "placeholder diagram",
+                "wireframe placeholder",
+                "empty circle",
+                "human sketch",
+                "hand holding demo",
+                "wearing demo",
+                "engraved text",
+                "readable rune",
+                "catalog layout",
+            ]
+        )
+    return ", ".join(shared)
 
 
 def build_card_layout_notes(style_bible: StyleBible) -> str:
     return (
-        f"标注语言使用 {style_bible.asset_card_rules.label_language}，"
-        f"标注位置为 {style_bible.asset_card_rules.label_position}，"
-        f"标注样式为 {style_bible.asset_card_rules.label_style}，"
-        f"整体版式遵循 {style_bible.asset_card_rules.layout_style}"
+        f"Label language: {style_bible.asset_card_rules.label_language}; "
+        f"label position: {style_bible.asset_card_rules.label_position}; "
+        f"label style: {style_bible.asset_card_rules.label_style}; "
+        f"overall layout style: {style_bible.asset_card_rules.layout_style}."
     )
 
 
@@ -204,10 +326,10 @@ def build_character_prompt_entry(
         "label_text": f"[{character.name} 人物参考]",
         "prompt": prompt_text,
         "negative_prompt": build_negative_prompt(style_bible, "character"),
-        "aspect_ratio": "3:4",
-        "framing": "单人半身至大半身参考卡",
-        "background_treatment": "纯净浅色背景，主体居中，底部保留标注区",
-        "generation_intent": "用于后续分镜与视频生成的人物一致性参考资产图",
+        "aspect_ratio": ASSET_REFERENCE_ASPECT_RATIO,
+        "framing": "Single-character reference sheet with a half-body to three-quarter portrait emphasis.",
+        "background_treatment": "Clean light background, centered subject, reserved bottom label area.",
+        "generation_intent": "Character consistency reference sheet for downstream storyboard and video generation.",
         "card_layout_notes": build_card_layout_notes(style_bible),
     }
 
@@ -223,10 +345,10 @@ def build_scene_prompt_entry(
         "label_text": f"[{scene.name} 场景参考]",
         "prompt": prompt_text,
         "negative_prompt": build_negative_prompt(style_bible, "scene"),
-        "aspect_ratio": "16:9",
-        "framing": "宽景环境参考卡",
+        "aspect_ratio": ASSET_REFERENCE_ASPECT_RATIO,
+        "framing": "Wide environment reference sheet.",
         "figure_policy": "no_identifiable_characters",
-        "generation_intent": "用于后续分镜与视频生成的环境一致性参考资产图",
+        "generation_intent": "Environment consistency reference sheet for downstream storyboard and video generation.",
         "card_layout_notes": build_card_layout_notes(style_bible),
     }
 
@@ -242,10 +364,10 @@ def build_prop_prompt_entry(
         "label_text": f"[{prop.name} 道具参考]",
         "prompt": prompt_text,
         "negative_prompt": build_negative_prompt(style_bible, "prop"),
-        "aspect_ratio": "1:1",
-        "framing": "单一道具居中参考卡",
-        "isolation_rules": "仅展示单一道具主体，不出现人物、手部、佩戴者或额外同类物件",
-        "generation_intent": "用于后续分镜与视频生成的道具一致性参考资产图",
+        "aspect_ratio": ASSET_REFERENCE_ASPECT_RATIO,
+        "framing": "Centered single-prop reference sheet.",
+        "isolation_rules": "Show only the single prop subject, with no people, hands, wearer, or extra same-category objects.",
+        "generation_intent": "Prop consistency reference sheet for downstream storyboard and video generation.",
         "card_layout_notes": build_card_layout_notes(style_bible),
     }
 

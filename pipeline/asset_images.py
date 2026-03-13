@@ -174,6 +174,7 @@ def generate_single_image(
         response_format="b64_json",
         size=size,
         watermark=not DISABLE_PLATFORM_WATERMARK,
+        optimize_prompt=False,
         timeout=300.0,
     )
     if not response.data:

@@ -43,6 +43,29 @@ Last updated: 2026-03-12
 - Ran another fresh end-to-end experiment from script input through asset images under `runs/20260312-220137`.
 - Switched new run-directory creation from timestamp names to sequential `runs/runN` naming.
 - Re-ran the full implemented pipeline after confirming `watermark=False` is applied in the image API call; the latest full run is `runs/run1`.
+- Converted the current prompt stack to English-first wording for:
+  - asset extraction
+  - style bible
+  - asset prompt generation
+  - asset image rendering
+- Added small explicit output normalizations in `pipeline/asset_extraction.py` for recurring model drift:
+  - `identity_markers` string -> list
+  - numeric `age` -> string
+  - `schema_version: "1.0.0"` -> `"1.0"`
+- Confirmed the Volcano image SDK does not expose a dedicated `negative_prompt` parameter in the current client wrapper; the stored `negative_prompt` field is metadata only.
+- Disabled image-side `optimize_prompt` in the Volcano image call so the service stops rewriting the handcrafted render prompt.
+- Ran multiple fresh prompt experiments under:
+  - `runs/run3`
+  - `runs/run5`
+  - `runs/run8`
+  - `runs/run9`
+- Added a safety-oriented rule for underage characters: do not emit exact numeric ages in image prompts; use broad descriptors like `young teen` instead.
+- Latest observation from `runs/run9`:
+  - character sheets improved noticeably compared with earlier runs
+  - character QR/color-strip contamination was reduced but not fully eliminated
+  - prop sheets still drift toward mannequin / torso-display interpretations
+  - scene sheets still drift toward presentation-board framing and may still include human figures
+  - prompt-only tuning is helping most on characters and much less on scenes / props
 
 ## Current Phase
 
@@ -89,3 +112,6 @@ The project now has:
   - character images can still hallucinate embedded Chinese glyphs and QR-like marks
   - scene images still tend to add people despite explicit empty-scene wording
   - prop images can still drift into the wrong object class or mix object views with humanoid silhouettes
+- Latest state after the English-prompt experiments (`runs/run9`):
+  - character images are the closest to target so far
+  - scene and prop images remain the weakest part of the current prompt-only approach

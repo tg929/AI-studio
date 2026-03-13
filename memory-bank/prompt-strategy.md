@@ -89,7 +89,15 @@ Required behavior:
 - Put layout control in the image-stage prompt, but describe composition as visual arrangement, not as printable editorial design.
 - For scene assets, "empty environment only" must be repeated very explicitly, otherwise the model tends to add background crowds.
 - For props, suppress readable inscriptions and symbolic marks aggressively; object names can leak into engraved surface text if the wording is too literal.
+- Avoid overly explicit forbidden tokens like `QR code`, `barcode`, and `watermark` when possible; some image-model runs literalize those terms into template-like decorations.
+- For underage characters, avoid exact numeric age wording in image prompts; broader visual descriptors are safer and produced more stable runs.
+- The Volcano image client currently does not expose a dedicated `negative_prompt` field in the SDK wrapper we are using, so render-prompt wording is doing almost all the suppression work.
+- Disabling image-side `optimize_prompt` is beneficial here because service-side prompt rewriting weakens carefully tuned anti-template constraints.
 - Current target layout:
   - character: left close-up portrait + right three full-body views (front / side / back)
   - scene: left master view + right three same-location auxiliary views
   - prop: left hero view + right three full object views (front / side / back)
+- Current empirical status after `runs/run9`:
+  - character prompts respond well to English prompt tightening
+  - prop prompts still drift into mannequin/torso-display imagery
+  - scene prompts still drift into presentation-board composition and human-figure leakage
