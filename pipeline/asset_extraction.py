@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,8 +33,24 @@ def normalize_script_text(raw_text: str) -> str:
     return "\n\n".join(paragraphs).strip()
 
 
+def resolve_next_run_dir(output_root: Path) -> Path:
+    output_root.mkdir(parents=True, exist_ok=True)
+    existing_indexes = []
+    for child in output_root.iterdir():
+        if not child.is_dir():
+            continue
+        name = child.name
+        if not name.startswith("run"):
+            continue
+        suffix = name[3:]
+        if suffix.isdigit():
+            existing_indexes.append(int(suffix))
+    next_index = max(existing_indexes, default=-1) + 1
+    return output_root / f"run{next_index}"
+
+
 def build_run_artifacts(output_root: Path) -> AssetExtractionArtifacts:
-    run_dir = output_root / time.strftime("%Y%m%d-%H%M%S")
+    run_dir = resolve_next_run_dir(output_root)
     input_dir = run_dir / "01_input"
     asset_dir = run_dir / "02_assets"
     input_dir.mkdir(parents=True, exist_ok=True)
@@ -45,6 +60,8 @@ def build_run_artifacts(output_root: Path) -> AssetExtractionArtifacts:
 
 def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
+    if normalized.get("schema_version") == "1.0.0":
+        normalized["schema_version"] = "1.0"
 
     genre = normalized.get("genre")
     if isinstance(genre, list):
@@ -57,6 +74,13 @@ def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
         normalized["story_meta"] = story_meta
 
     for character in normalized.get("characters", []):
+        age = character.get("age")
+        if isinstance(age, int | float):
+            character["age"] = str(age)
+        identity_markers = character.get("identity_markers")
+        if isinstance(identity_markers, str):
+            marker = identity_markers.strip()
+            character["identity_markers"] = [marker] if marker else []
         relationships = character.get("relationship_targets")
         if not isinstance(relationships, list):
             continue
