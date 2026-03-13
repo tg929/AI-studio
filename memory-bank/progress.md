@@ -115,3 +115,16 @@ The project now has:
 - Latest state after the English-prompt experiments (`runs/run9`):
   - character images are the closest to target so far
   - scene and prop images remain the weakest part of the current prompt-only approach
+- After reviewing `runs/run9`, the preferred target style for character sheets was reset to the earlier `runs/20260312-220137/05_asset_images/characters` look:
+  - left side = one large close-up / half-body portrait
+  - right side = three clearly readable large full-body views
+  - keep the cleaner canvas behavior achieved in later runs
+- `run10` is now the active continuation run. It already contains `01_input` through `04_asset_prompts`, and only `05_asset_images` is being iterated in place.
+- Latest `run10` image-stage tuning moved `prompts/asset_images.py` back toward the older Chinese composition language and reduced the prompt from a long rule-heavy board description to a shorter “设定组合图” style request:
+  - character: return to the older large-portrait + large right-side three-view layout
+  - scene: force three fully rendered alternate angles in a right-side vertical column
+  - prop: force one inert object only, with three large right-side alternate views and no mannequin / ring / clothing drift
+- Current working rule for expensive calls:
+  - do local prompt analysis first
+  - only rerun the image stage when the expected improvement is concrete
+  - keep all stage outputs for the same experiment under one `runs/runN` directory

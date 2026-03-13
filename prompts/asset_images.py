@@ -7,50 +7,39 @@ from schemas.asset_prompts import CharacterAssetPrompt, PropAssetPrompt, SceneAs
 
 def build_character_render_prompt(item: CharacterAssetPrompt) -> str:
     return (
-        "Create one single horizontal 16:9 character reference sheet on a clean white or very pale warm gray background. "
-        "The desired look is refined Chinese fantasy anime and polished xuanhuan manhua concept-art quality: elegant semi-realistic face rendering, crisp clean linework, smooth luminous shading, restrained cool color grading, delicate fabric sheen, and graceful high-fidelity costume detail. "
-        "This must feel like a professional production character sheet, not a poster, not a magazine page, not a UI mockup, and not a catalog template. "
-        "Left side: one large close-up half-body portrait of the same character, occupying about forty-five percent of the canvas width and reading as the dominant visual focus. "
-        "Right side: exactly three full standing body views of the same character, arranged left to right as front, pure side, and back. "
-        "The three standing views must be large and readable, not tiny. Each standing figure should fill most of the height of its own column from head to shoes, with both feet fully visible and the full silhouette clearly readable. "
-        "No fourth figure, no duplicate angle, no extra portrait, no inset, no floating callout, and no cropped body. "
-        "All four depictions must be unmistakably the same person with the same face, same hairline, same hairstyle, same hair length, same costume structure, same garment pattern, same shoes, same accessories, same body proportions, and same identity details. "
-        "If the subject description does not explicitly include facial hair, do not invent a beard or mustache. If the subject description includes facial hair, it must remain visible and consistent in every applicable view. "
-        "Use natural neutral standing posture for the three full-body views. Keep the right-side views elegant and clean, with enough scale to show the full outfit clearly rather than miniature doll-sized figures. "
-        "Keep the canvas extremely clean: no text, no letters, no Chinese characters, no numbers, no QR code, no logo, no watermark, no page header, no footer, no corner mark, no color strip, no sidebar, no interface widget, no title block, no stamp, and no black outer frame. "
-        "Only very faint thin guide lines are allowed between areas. No extra characters, no props, no furniture, no studio equipment, and no clutter. "
-        f"Character subject details: {item.prompt}."
+        "请生成一张高质量横向白底人物设定组合图。整体必须是精致国风玄幻手绘漫风，接近高质量东方动漫角色设定图质感：线条清晰利落有笔触感，脸部通透精致，发丝清晰有层次，布料纹理自然，明暗柔和，色彩通透稳重，中低饱和，不要扁平低幼卡通感。 "
+        "画面结构固定。左半部分是一张同一人物的大幅近景半身肖像，作为主视觉，人物脸部和上半身要足够大、足够清楚。右半部分横向并排三张等大的完整站立全身视图，从左到右固定为正面、纯侧面、背面。右侧三张全身图必须占据右半区域的大部分高度，不能是小缩略图，不能过小，必须头到脚完整入画，鞋履完整可见。 "
+        "绝对只能有这四个视图，不能出现第四色图、重复视图、额外近景、小插图、漂浮细节框。 "
+        "四个视图必须是完全同一人物：脸型、五官、肤色、发际线、发长、发型、胡须状态、服装结构、服饰花纹、鞋履、配饰、身材比例、身份特征全部保持一致。 "
+        "必须严格服从人物主体设定里的性别、年龄气质、服装类别、服装主色、服装细节和发型长度，不允许擅自改成另一性别，不允许擅自替换服装主色，不允许把裙装改成长袍，也不允许把男性弟子服改成女性衣裙。 "
+        "右侧三张全身图站姿自然端正，手臂自然放置，不做夸张动作，三张图都应保持优雅干净、比例准确、服装轮廓清楚。 "
+        "背景必须保持纯净留白，只允许极淡的细分隔线。图内绝对不要出现任何可读文字、汉字、英文字母、数字、二维码、logo、水印、页眉、页脚、页码、角标、色条、侧边栏、黑色大边框、UI控件、说明框、模板装饰。 "
+        "不要出现额外人物、额外道具、摄影器材、家具、杂物、黑色厚边框或脏污边缘。 "
+        f"人物主体设定：{item.prompt}。"
     )
 
 
 def build_scene_render_prompt(item: SceneAssetPrompt) -> str:
     return (
-        "Create one single horizontal 16:9 environment reference sheet on a clean white or very pale warm gray background. "
-        "The visual style must match refined Chinese fantasy anime and polished xuanhuan manhua concept art: clear spatial perspective, elegant architectural drawing discipline, crisp linework, soft luminous shading, restrained cool palette, and clean production-design quality. "
-        "This is an environment reference sheet, not a poster, not a brochure, not an architectural blueprint page, and not a UI layout. "
-        "Left side: one large master view of the same location, occupying about forty-five percent of the canvas width and serving as the dominant scene overview. "
-        "Right side: exactly three alternate full-location views of the exact same place, arranged vertically or in a clean stacked-right layout, each clearly showing a different viewing direction across the same space. "
-        "The three alternate views must remain readable full-environment views rather than tiny inserts or detail crops. Each one should preserve the same architecture, landmark placement, entrance logic, ground pattern, depth layout, material treatment, and lighting logic as the large master view. "
-        "This is a strictly empty environment sheet. No people, no crowd, no attendants, no silhouettes, no distant figures, no ghosted character traces, no statues shaped like humans, and no living beings anywhere. "
-        "Keep the canvas extremely clean: no text, no letters, no Chinese characters, no numbers, no QR code, no logo, no watermark, no page header, no footer, no corner mark, no color strip, no sidebar, no title block, no annotation graphics, and no black outer frame. "
-        "Only very faint thin guide lines are allowed if needed. No furniture catalog look, no infographic look, no UI chrome, and no decorative presentation-board furniture. "
-        f"Scene subject details: {item.prompt}."
+        "请生成一张高质量横向白底场景设定组合图。整体必须是精致国风玄幻手绘漫风，接近高质量东方动漫场景设定图质感：空间透视清楚，建筑结构稳定，线条利落有笔触感，明暗柔和，色彩通透稳重，材质统一，不要扁平说明书感。 "
+        "画面结构固定。左半部分是一张同一地点的大幅主全景图，作为主要空间总览。右侧是一整列三张等大的辅助视角图，从上到下分别表现主轴正向视角、侧向斜视视角、从对侧回看的反向视角。右侧三张图都必须是完整上色渲染的场景视图，而不是局部特写、线稿、草图、平面图、俯视图、建筑蓝图或灰白草模图。 "
+        "四个视图必须保持同一场景的建筑布局、核心地标位置、入口方向、地面结构、材质逻辑、光照方向和空间层次完全一致。右侧三张辅助视角必须足够清晰可读，不能像缩略图，也不能只是重复裁切。 "
+        "这是严格的空场景设定图。绝对不要出现人物、人群、侍从、路人、远景小人、人物剪影、角色残影、类人雕像或任何生物。 "
+        "背景必须保持纯净留白，只允许极淡的细分隔线。图内绝对不要出现任何可读文字、汉字、英文字母、数字、二维码、logo、水印、页眉、页脚、页码、角标、色条、侧边栏、黑色大边框、说明框、版式装饰或UI控件。 "
+        "不要出现黑色厚边框、杂志页感、说明书页感、信息图模板感。 "
+        f"场景主体设定：{item.prompt}。"
     )
 
 
 def build_prop_render_prompt(item: PropAssetPrompt) -> str:
     return (
-        "Create one single horizontal 16:9 prop reference sheet on a clean white or very pale warm gray background. "
-        "The visual style must match refined Chinese fantasy anime and polished xuanhuan manhua concept art: crisp silhouette control, clean linework, soft luminous shading, restrained cool palette, believable material rendering, and high readability of shape. "
-        "This is a prop reference sheet, not a poster, not a catalog page, not an engineering diagram, and not a UI layout. "
-        "Left side: one large hero depiction of the exact same prop, occupying about forty-five percent of the canvas width. "
-        "Right side: exactly three full-object views of the exact same prop, arranged from left to right as front, pure side, and back, or if true front-back is ambiguous, three clearly different full-object angles of the same single item. "
-        "The three right-side views must be large and readable, not tiny. Each view should fill most of the height of its own column with the complete object visible from top to bottom. "
-        "The prop is strictly an inanimate object. No humanoid silhouette, no mannequin, no torso stand, no holder figure, no hands, no wearer, no body parts, no clothing sheet logic, and no substitute object class. "
-        "All four depictions must preserve the same silhouette, massing, volume, construction, material, surface finish, wear pattern, and identity-defining details. "
-        "Any surface motif must remain abstract and unreadable. No letters, no Chinese characters, no numbers, no runes, no inscription, no engraved readable text, and no nameplate. "
-        "Keep the canvas extremely clean: no text, no QR code, no logo, no watermark, no page header, no footer, no corner mark, no color strip, no sidebar, no title block, no annotation graphics, and no black outer frame. "
-        "Only very faint thin guide lines are allowed if needed. Do not drift into a mannequin board, costume board, industrial sheet, or product brochure. "
-        f"{item.isolation_rules}. "
-        f"Prop subject details: {item.prompt}."
+        "请生成一张高质量横向白底道具设定组合图。整体必须是精致国风玄幻手绘漫风，接近高质量东方动漫道具设定图质感：轮廓清楚，结构稳定，材质可辨，线条利落有笔触感，明暗柔和，色彩通透稳重，不要说明书模板感，也不要工业图纸感。 "
+        "画面结构固定。左半部分是一张同一道具的大幅英雄主视图，作为主要展示。右侧是一整列三张等大的完整辅助视角图。若该道具有明确正背侧关系，则从上到下为正视、纯侧视、背视；若前后不明显，也必须是同一件道具的三个不同完整角度，而不是其他物体。 "
+        "右侧三张辅助视图必须够大、够清楚、可直接看清完整轮廓和结构，不能像缩略图。每张视图都必须把整件道具完整画出来，不能只画局部。右侧三张辅助视图也必须是完整上色渲染图，和左侧主图保持同等渲染质感，不允许变成线稿图、人体展示图、服装展示图、纸样图、机械分解图。 "
+        "这件道具必须始终是无生命物体。绝对不能出现人形、模特支架、人体轮廓、手持展示、佩戴展示、服装展示、角色站姿、人体局部、替代物体。 "
+        "必须严格服从道具主体设定中的物体类别与主轮廓。如果主体设定是石碑或碑状测试装置，就必须始终是一块直立厚重的石碑类物体，不允许变成刀剑、饰品、法器、雕像、服装、戒指或其他道具类别。 "
+        "四个视图必须保持同一件道具的轮廓、体积比例、结构、材质、表面纹理、磨损和识别性细节完全一致。表面纹样只能是抽象不可读纹样，不允许出现汉字、英文字母、数字、符文、铭文、刻字。 "
+        "背景必须保持纯净留白，只允许极淡的细分隔线。图内绝对不要出现任何可读文字、二维码、logo、水印、页眉、页脚、页码、角标、色条、侧边栏、黑色大边框、说明框、模板装饰或UI控件。 "
+        "不要漂移成角色设定板、商品广告页、工业零件图册，不要出现黑色厚边框、假占位圆圈、线框示意图。 "
+        f"道具主体设定：{item.prompt}。"
     )

@@ -97,7 +97,12 @@ Required behavior:
   - character: left close-up portrait + right three full-body views (front / side / back)
   - scene: left master view + right three same-location auxiliary views
   - prop: left hero view + right three full object views (front / side / back)
-- Current empirical status after `runs/run9`:
-  - character prompts respond well to English prompt tightening
-  - prop prompts still drift into mannequin/torso-display imagery
-  - scene prompts still drift into presentation-board composition and human-figure leakage
+- English-first prompt tuning improved cleanliness in `runs/run9`, but also pushed the model toward flatter generic template aesthetics. The preferred direction is now:
+  - keep the cleaner canvas behavior from later runs
+  - restore the older Chinese “设定组合图” style wording used in `runs/20260312-220137`
+  - keep the prompt shorter and more subject-first instead of stacking too many prohibitions
+- Current empirical status after the latest `run10` image-only iterations:
+  - character sheets benefit from Chinese subject-first layout wording and a shorter composition spec
+  - character identity consistency still depends heavily on the upstream asset prompt carrying explicit clothing color, hairstyle, and role markers
+  - scene sheets need explicit “fully rendered alternate angles” wording, not “视图” alone, otherwise they drift toward diagram / plate layouts
+  - prop sheets need explicit inert-object locking plus repeated category anchoring, otherwise they drift toward human-shaped boards or unrelated object classes
