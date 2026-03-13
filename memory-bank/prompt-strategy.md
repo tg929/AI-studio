@@ -81,3 +81,15 @@ Required behavior:
 - The stitched board contains only the assets used in that shot.
 - Inter-stage text outputs should be JSON-first.
 - The production runtime is Python + AgentKit.
+
+## Asset Image Prompt Lessons
+
+- Avoid headline-style imperative phrases such as `Create ONE ...` in image prompts. The image model may copy them into the canvas as visible text.
+- Keep the text-model asset prompt focused on subject identity and consistency anchors. Do not let it generate page-template language.
+- Put layout control in the image-stage prompt, but describe composition as visual arrangement, not as printable editorial design.
+- For scene assets, "empty environment only" must be repeated very explicitly, otherwise the model tends to add background crowds.
+- For props, suppress readable inscriptions and symbolic marks aggressively; object names can leak into engraved surface text if the wording is too literal.
+- Current target layout:
+  - character: left close-up portrait + right three full-body views (front / side / back)
+  - scene: left master view + right three same-location auxiliary views
+  - prop: left hero view + right three full object views (front / side / back)

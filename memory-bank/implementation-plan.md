@@ -80,7 +80,7 @@ Current state:
 
 ## Step 4: Asset Image Generation
 
-Status: next
+Status: done
 
 Goal:
 
@@ -96,9 +96,19 @@ Validation:
 - Every asset has a usable labeled image.
 - Naming and labeling are consistent.
 
+Current state:
+
+- Raw image generation is implemented.
+- Final labeled asset cards are rendered locally for consistent text quality.
+- `asset_images_manifest.json` is implemented and verified.
+- Asset-image prompts have been tightened toward reference-board layouts:
+  - characters: close-up + turnaround views
+  - scenes: master shot + support views
+  - props: hero view + structural views
+
 ## Step 5: Storyboard Generation
 
-Status: pending
+Status: next
 
 Goal:
 
