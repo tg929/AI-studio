@@ -12,6 +12,7 @@ from schemas.storyboard import ShotId
 
 class FinalConcatSpec(StrictModel):
     concat_mode: Literal["ffmpeg_concat_demuxer_reencode"]
+    trim_leading_seconds: float = Field(ge=0)
     video_codec: str
     audio_codec: str
     pixel_format: str
@@ -21,7 +22,8 @@ class FinalConcatSpec(StrictModel):
 class FinalVideoInput(StrictModel):
     shot_id: ShotId
     order: int = Field(ge=1)
-    video_path: str
+    source_video_path: str
+    trimmed_video_path: str
 
 
 class FinalVideoManifest(StrictModel):

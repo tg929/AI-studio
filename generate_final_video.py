@@ -17,6 +17,12 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Path to an existing shot_videos_manifest.json file.",
     )
+    parser.add_argument(
+        "--trim-leading-seconds",
+        type=float,
+        default=1.5,
+        help="Seconds to trim from the start of every shot video before concatenation. Default: 1.0",
+    )
     return parser.parse_args()
 
 
@@ -26,7 +32,10 @@ def main() -> int:
     if not shot_videos_manifest_path.exists():
         raise FileNotFoundError(f"Shot videos manifest not found: {shot_videos_manifest_path}")
 
-    artifacts = generate_final_video(shot_videos_manifest_path=shot_videos_manifest_path)
+    artifacts = generate_final_video(
+        shot_videos_manifest_path=shot_videos_manifest_path,
+        trim_leading_seconds=args.trim_leading_seconds,
+    )
     print(f"Run directory: {artifacts.run_dir}")
     print(f"Final video artifacts: {artifacts.final_dir}")
     print(f"Concat list: {artifacts.concat_list_path}")

@@ -233,7 +233,8 @@ Current role:
 Current role:
 
 - Loads and validates `shot_videos_manifest.json`
-- Builds an ffmpeg concat input list from succeeded shot videos
+- Trims a configurable leading duration from each succeeded shot video before concat
+- Builds an ffmpeg concat input list from the trimmed shot videos
 - Re-encodes and concatenates all shot videos into `final_video.mp4`
 - Writes `final_video_manifest.json`
 
@@ -298,7 +299,7 @@ Current role:
 Current role:
 
 - Defines the strict Pydantic schema for `final_video_manifest.json`
-- Validates concat inputs, final output path metadata, and sequential shot ordering
+- Validates concat trim settings, per-shot source/trimmed inputs, final output path metadata, and sequential shot ordering
 
 ### `prompts/asset_extraction.py`
 
@@ -455,6 +456,7 @@ The implemented nodes now write:
 - `runs/runN/10_final/concat_inputs.txt`
 - `runs/runN/10_final/final_video_manifest.json`
 - `runs/runN/10_final/final_video.mp4`
+- `runs/runN/10_final/trimmed/...`
 
 ## Model Compatibility Note
 

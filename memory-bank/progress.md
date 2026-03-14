@@ -92,6 +92,11 @@ Last updated: 2026-03-14
 - Generated the first full final video for `run10`:
   - `runs/run10/10_final/final_video.mp4`
   - verified output: `1280x720`, `24 fps`, about `60.33s`
+- Updated the final-video concat stage to trim the leading first-frame display time from every shot before stitching.
+- The current default trim is `1.0s` per shot, aligned with the prompt rule that the stitched board should disappear within the first second.
+- Rebuilt `runs/run10/10_final/final_video.mp4` with this trim rule:
+  - trimmed intermediates are saved under `runs/run10/10_final/trimmed/`
+  - verified output is now about `54.35s`
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -220,6 +225,7 @@ The project now has:
   - concat input list
   - final video manifest
   - concatenated final video `final_video.mp4`
+  - per-shot trimmed intermediates used for concat
 - The storyboard stage currently uses the same text-model pattern as earlier JSON stages:
   - prompt-constrained JSON output
   - local field-alias normalization

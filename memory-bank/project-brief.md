@@ -42,6 +42,7 @@ Current baseline:
 - Shot duration fixed at 10 seconds
 - Asset images must include labels
 - Video model gets one stitched board image plus one shot prompt
+- Final video stitching trims the leading first-frame display window from each shot before concatenation
 - JSON as the default inter-stage contract
 
 ## V1 Success Criteria

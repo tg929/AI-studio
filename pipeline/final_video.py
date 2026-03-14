@@ -10,11 +10,14 @@ from pipeline.io import read_json, write_json
 from schemas.final_video_manifest import FinalVideoManifest
 from schemas.shot_videos_manifest import ShotVideosManifest
 
+DEFAULT_TRIM_LEADING_SECONDS = 1.0
+
 
 @dataclass(frozen=True, slots=True)
 class FinalVideoArtifacts:
     run_dir: Path
     final_dir: Path
+    trimmed_dir: Path
     concat_list_path: Path
     final_video_path: Path
 
@@ -31,10 +34,13 @@ def resolve_run_dir(shot_videos_manifest_path: Path) -> Path:
 
 def build_final_video_artifacts(run_dir: Path) -> FinalVideoArtifacts:
     final_dir = run_dir / "10_final"
+    trimmed_dir = final_dir / "trimmed"
     final_dir.mkdir(parents=True, exist_ok=True)
+    trimmed_dir.mkdir(parents=True, exist_ok=True)
     return FinalVideoArtifacts(
         run_dir=run_dir,
         final_dir=final_dir,
+        trimmed_dir=trimmed_dir,
         concat_list_path=(final_dir / "concat_inputs.txt").resolve(),
         final_video_path=(final_dir / "final_video.mp4").resolve(),
     )
@@ -44,7 +50,59 @@ def shell_quote_for_ffmpeg(path: Path) -> str:
     return str(path).replace("'", "'\\''")
 
 
-def generate_final_video(*, shot_videos_manifest_path: Path) -> FinalVideoArtifacts:
+def trim_video_clip(*, source_path: Path, output_path: Path, trim_leading_seconds: float) -> None:
+    if trim_leading_seconds <= 0:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(source_path),
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "aac",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            f"{trim_leading_seconds:.3f}",
+            "-i",
+            str(source_path),
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def generate_final_video(
+    *,
+    shot_videos_manifest_path: Path,
+    trim_leading_seconds: float = DEFAULT_TRIM_LEADING_SECONDS,
+) -> FinalVideoArtifacts:
     shot_videos = ShotVideosManifest.model_validate(read_json(shot_videos_manifest_path))
     run_dir = resolve_run_dir(shot_videos_manifest_path)
     artifacts = build_final_video_artifacts(run_dir)
@@ -57,15 +115,22 @@ def generate_final_video(*, shot_videos_manifest_path: Path) -> FinalVideoArtifa
     concat_lines: list[str] = []
     inputs_payload: list[dict[str, object]] = []
     for item in succeeded_results:
-        video_path = Path(item.video_local_path)
-        if not video_path.exists():
-            raise FileNotFoundError(f"Shot video file not found: {video_path}")
-        concat_lines.append(f"file '{shell_quote_for_ffmpeg(video_path.resolve())}'")
+        source_video_path = Path(item.video_local_path)
+        if not source_video_path.exists():
+            raise FileNotFoundError(f"Shot video file not found: {source_video_path}")
+        trimmed_video_path = (artifacts.trimmed_dir / f"{item.shot_id}.mp4").resolve()
+        trim_video_clip(
+            source_path=source_video_path.resolve(),
+            output_path=trimmed_video_path,
+            trim_leading_seconds=trim_leading_seconds,
+        )
+        concat_lines.append(f"file '{shell_quote_for_ffmpeg(trimmed_video_path)}'")
         inputs_payload.append(
             {
                 "shot_id": item.shot_id,
                 "order": item.order,
-                "video_path": str(video_path.resolve()),
+                "source_video_path": str(source_video_path.resolve()),
+                "trimmed_video_path": str(trimmed_video_path),
             }
         )
 
@@ -102,6 +167,7 @@ def generate_final_video(*, shot_videos_manifest_path: Path) -> FinalVideoArtifa
             "title": shot_videos.title,
             "concat_spec": {
                 "concat_mode": "ffmpeg_concat_demuxer_reencode",
+                "trim_leading_seconds": trim_leading_seconds,
                 "video_codec": "libx264",
                 "audio_codec": "aac",
                 "pixel_format": "yuv420p",
