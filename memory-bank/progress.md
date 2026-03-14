@@ -141,3 +141,8 @@ The project now has:
 - Important run-state note:
   - `run10/03_style`, `run10/04_asset_prompts`, and `run10/05_asset_images` are now derived from the old `run10/02_assets`
   - they should be treated as stale until we decide to rerun downstream stages
+- `run10` has now been brought back into sync:
+  - regenerated `03_style` from the updated `02_assets`
+  - regenerated `04_asset_prompts` from the updated `03_style`
+  - regenerated `05_asset_images` from the updated `04_asset_prompts`
+- `run10` is again the current baseline run for further prompt tuning and visual inspection.
