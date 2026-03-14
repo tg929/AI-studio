@@ -108,7 +108,7 @@ Current state:
 
 ## Step 5: Storyboard Generation
 
-Status: next
+Status: done
 
 Goal:
 
@@ -126,9 +126,15 @@ Validation:
 - No missing asset references.
 - Shot duration is locked to 10 seconds.
 
+Current state:
+
+- `storyboard.json` generation is implemented and verified.
+- The node now validates shot sequencing, fixed 10-second duration, contiguous segment coverage, and asset-reference integrity against `asset_registry.json`.
+- `runs/run10/06_storyboard/storyboard.json` is the current verified storyboard baseline.
+
 ## Step 6: Shot Reference Board Generation
 
-Status: pending
+Status: done
 
 Goal:
 
@@ -144,23 +150,39 @@ Validation:
 - Exactly one stitched board per shot.
 - Only assets used in that shot appear on the board.
 
-## Step 7: Shot Video Generation
+Current state:
 
-Status: pending
+- Shot-reference-board generation is implemented and verified.
+- The node now reads validated `storyboard.json` and `asset_images_manifest.json`, renders local PNG boards, and writes `shot_reference_manifest.json`.
+- `runs/run10/07_shot_reference_boards/shot_reference_manifest.json` is the current verified shot-board baseline.
+
+## Step 7: Video Job Assembly and Board Publishing
+
+Status: in progress
 
 Goal:
 
-- Generate one video per shot using `shot prompt + stitched board image`.
+- Assemble one validated video job per shot.
+- Publish each stitched shot board to a stable public URL for `first_frame`.
 
 Outputs:
 
-- `shot_videos/`
 - `video_jobs.json`
+- published shot-board URLs recorded in `shot_reference_manifest.json`
 
 Validation:
 
-- One video per shot is generated successfully.
-- Output duration is close to 10 seconds.
+- One video job exists per shot.
+- Prompt assembly is valid and stays within length limits.
+- Every shot board has a usable `board_public_url`.
+
+Current state:
+
+- `video_jobs.json` assembly is implemented and verified.
+- `runs/run10/08_video_jobs/video_jobs.json` is the current verified video-job baseline.
+- All current `run10` jobs are blocked only because `shot_reference_manifest.json` still has empty `board_public_url` values.
+- Shot-board publishing is implemented and locally verified.
+- The remaining step before real video submission is to publish `run10` boards to an actually reachable public host/path and rerun `video_jobs`.
 
 ## Step 8: Final Video Concatenation
 

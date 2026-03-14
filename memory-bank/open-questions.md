@@ -13,17 +13,12 @@ These questions are still unresolved and should be reviewed before major impleme
 - How dense should the labels be in V1?
 - Should we support multiple variations per character asset in V1 or later?
 
-## Storyboard
-
-- What is the final field set for `storyboard.json`?
-- Do shots need explicit emotion, camera language, and pacing fields in V1?
-- Should shot prompts be strictly normalized or allow stylistic variation?
-
 ## Video
 
 - Final target resolution for V1: keep at 720p or move higher?
 - Final FPS target for V1?
 - What is the exact prompt guardrail wording to stop the video model from reproducing the board layout?
+- Which public hosting path should publish stitched shot boards so `board_public_url` is stable and directly usable as `first_frame`?
 
 ## Human Review
 
@@ -33,5 +28,4 @@ These questions are still unresolved and should be reviewed before major impleme
 
 ## Production Outputs
 
-- Exact directory layout for run outputs
 - Naming conventions for asset, board, shot, and final video files

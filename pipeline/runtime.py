@@ -27,6 +27,13 @@ class ImageModelConfig:
     base_url: str = DEFAULT_BASE_URL
 
 
+@dataclass(frozen=True, slots=True)
+class VideoModelConfig:
+    model_name: str
+    api_key: str
+    base_url: str = DEFAULT_BASE_URL
+
+
 def load_runtime_envs(config_path: Path) -> dict[str, str]:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     envs = raw.get("common", {}).get("runtime_envs", {}) or {}
@@ -72,4 +79,16 @@ def load_image_model_config(config_path: Path) -> ImageModelConfig:
 
 
 def build_image_client(config: ImageModelConfig) -> Ark:
+    return Ark(api_key=config.api_key, base_url=config.base_url)
+
+
+def load_video_model_config(config_path: Path) -> VideoModelConfig:
+    envs = load_runtime_envs(config_path)
+    model_name = require_env(envs, "MODEL_VIDEO_NAME")
+    api_key = require_env(envs, "MODEL_VIDEO_API_KEY")
+    base_url = envs.get("MODEL_VIDEO_API_BASE", DEFAULT_BASE_URL).strip() or DEFAULT_BASE_URL
+    return VideoModelConfig(model_name=model_name, api_key=api_key, base_url=base_url)
+
+
+def build_video_client(config: VideoModelConfig) -> Ark:
     return Ark(api_key=config.api_key, base_url=config.base_url)

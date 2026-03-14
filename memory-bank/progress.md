@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-03-12
+Last updated: 2026-03-14
 
 ## Completed
 
@@ -60,6 +60,18 @@ Last updated: 2026-03-12
   - `runs/run8`
   - `runs/run9`
 - Added a safety-oriented rule for underage characters: do not emit exact numeric ages in image prompts; use broad descriptors like `young teen` instead.
+- Implemented the `storyboard.json` generation node.
+- Added explicit Pydantic validation for `storyboard.json`.
+- Added cross-file storyboard validation for segment coverage, contiguous shot-to-segment mapping, and asset-reference integrity.
+- Ran the storyboard stage successfully for `run10` and saved the artifacts under `runs/run10/06_storyboard`.
+- Implemented the stitched shot reference board generation node.
+- Added explicit Pydantic validation for `shot_reference_manifest.json`.
+- Ran the shot-board stage successfully for `run10` and saved the artifacts under `runs/run10/07_shot_reference_boards`.
+- Implemented the `video_jobs.json` assembly node.
+- Added explicit Pydantic validation for `video_jobs.json`.
+- Ran the video-job assembly stage successfully for `run10` and saved the artifacts under `runs/run10/08_video_jobs`.
+- Implemented the stitched shot-board publishing node.
+- Verified locally that non-public board URLs remain blocked from video submission and public-looking board URLs turn all jobs `ready`.
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -79,12 +91,16 @@ The project now has:
 - one working Python style-bible node
 - one working Python asset-prompts node
 - one working Python asset-images node
+- one working Python storyboard node
+- one working Python shot-reference-board node
+- one working Python video-job assembly node
+- one working Python shot-board publishing node
 - project memory-bank setup
 
 ## Next Step
 
-- Generate `storyboard.json`
-- Then build one stitched reference board per shot
+- Publish `run10` stitched shot boards to a real stable public URL base for `first_frame`
+- Then start shot-video generation with the generated `video_jobs.json`
 
 ## Known Constraints
 
@@ -146,3 +162,37 @@ The project now has:
   - regenerated `04_asset_prompts` from the updated `03_style`
   - regenerated `05_asset_images` from the updated `04_asset_prompts`
 - `run10` is again the current baseline run for further prompt tuning and visual inspection.
+- `run10` now also includes a validated `06_storyboard/storyboard.json`:
+  - 6 shots total
+  - complete coverage of `seg_001` through `seg_012`
+  - every shot locked to 10 seconds
+  - every shot references only existing `scene_*`, `char_*`, and `prop_*` IDs
+- `run10` now also includes a validated `07_shot_reference_boards/shot_reference_manifest.json`:
+  - 6 stitched boards total
+  - one board per shot
+  - current layouts used `grid_2x1` and `grid_2x2`
+  - `shot_006` is the current example of a 3-asset `grid_2x2` board with one blank cell
+- `run10` now also includes a validated `08_video_jobs/video_jobs.json`:
+  - 6 video jobs total
+  - every prompt is assembled locally from fixed blocks plus asset/style anchors
+  - all current jobs are blocked only because `board_public_url` is still empty
+- The new board-publishing node is verified locally:
+  - `localhost` and other non-public URLs stay blocked in `video_jobs`
+  - public-looking `https://...` URLs produce `ready` jobs
+  - the remaining gap is a real externally reachable host/path for `run10` board files
+- The storyboard stage currently uses the same text-model pattern as earlier JSON stages:
+  - prompt-constrained JSON output
+  - local field-alias normalization
+  - Pydantic schema validation
+  - extra cross-file validation against `asset_registry.json`
+- The shot-board stage is now local and deterministic:
+  - reads `storyboard.json` + `asset_images_manifest.json`
+  - always includes the shot's `primary_scene_id`
+  - then places visible characters and visible props into a fixed grid template
+  - preserves the original labeled asset images without cropping or overlaying new text
+- Current locked storyboard/video-prep decisions:
+  - the later shot board is the video model `first_frame`
+  - `storyboard.json` is a structured shot-planning contract, not the final video prompt
+  - later video prompts should be assembled programmatically from storyboard fields plus asset/style anchors
+  - `video_jobs.json` is now assembled locally from `storyboard.json + shot_reference_manifest.json + asset_registry.json + style_bible.json`
+  - `shot_reference_manifest.json` currently leaves `board_public_url` empty; a publishing/URL step is still required before video submission

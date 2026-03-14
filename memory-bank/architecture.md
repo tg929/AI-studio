@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-12
+Last updated: 2026-03-14
 
 ## Current Files
 
@@ -30,6 +30,7 @@ Current role:
 - Loads local text-model runtime config from `agentkit.local.yaml`
 - Builds the Ark client for workflow nodes
 - Loads local image-model runtime config from `agentkit.local.yaml`
+- Loads local video-model runtime config from `agentkit.local.yaml`
 
 ### `pipeline/io.py`
 
@@ -75,6 +76,42 @@ Current role:
 - Generates raw asset images and final labeled asset cards
 - Writes `asset_images_manifest.json`
 
+### `generate_storyboard.py`
+
+Current role:
+
+- CLI entrypoint for the storyboard node
+- Reads a validated `style_bible.json`
+- Resolves the matching `asset_registry.json` and `script_clean.txt`
+- Generates `storyboard.json` into the same run directory
+
+### `generate_shot_reference_boards.py`
+
+Current role:
+
+- CLI entrypoint for the shot-reference-board node
+- Reads a validated `storyboard.json`
+- Resolves the matching `asset_images_manifest.json`
+- Generates one stitched board image per shot plus `shot_reference_manifest.json`
+
+### `generate_video_jobs.py`
+
+Current role:
+
+- CLI entrypoint for the video-job assembly node
+- Reads a validated `storyboard.json`
+- Resolves the matching `shot_reference_manifest.json`, `asset_registry.json`, and `style_bible.json`
+- Generates `video_jobs.json` into the same run directory
+
+### `publish_shot_reference_boards.py`
+
+Current role:
+
+- CLI entrypoint for the shot-board publishing node
+- Reads a validated `shot_reference_manifest.json`
+- Copies stitched board PNGs into a configured static-root directory
+- Writes `board_public_url` values back into the manifest
+
 ### `pipeline/style_bible.py`
 
 Current role:
@@ -111,6 +148,51 @@ Current role:
 - Adds stable local Chinese labels onto the final asset cards
 - Writes `asset_images_manifest.json`
 
+### `pipeline/storyboard.py`
+
+Current role:
+
+- Loads and validates `style_bible.json`
+- Resolves and validates the matching `asset_registry.json`
+- Loads `script_clean.txt`
+- Builds a storyboard input digest for the text model
+- Calls the text model
+- Normalizes observed shot-field aliases and enum drifts
+- Deterministically fills fixed top-level storyboard metadata
+- Validates the final result against the storyboard schema
+- Enforces extra cross-file checks such as contiguous segment coverage and valid shot asset references
+- Writes `storyboard.json`
+
+### `pipeline/shot_reference_boards.py`
+
+Current role:
+
+- Loads and validates `storyboard.json`
+- Resolves and validates the matching `asset_images_manifest.json`
+- Selects the shot's scene asset plus visible character/prop assets in deterministic order
+- Chooses a fixed grid template from asset count
+- Renders one PNG stitched board per shot using local image composition only
+- Writes `shot_reference_manifest.json`
+
+### `pipeline/video_jobs.py`
+
+Current role:
+
+- Loads and validates `storyboard.json`
+- Resolves and validates the matching `shot_reference_manifest.json`, `asset_registry.json`, and `style_bible.json`
+- Assembles fixed 5-block video prompts from storyboard fields plus asset/style anchors
+- Enforces prompt-length limits and first-frame URL readiness status
+- Writes `video_jobs.json`
+
+### `pipeline/shot_reference_publish.py`
+
+Current role:
+
+- Loads and validates `shot_reference_manifest.json`
+- Publishes stitched board PNGs into a configured static directory
+- Writes `board_public_url` values using a configured public base URL
+- Records publish results for later video-job generation
+
 ### `schemas/asset_registry.py`
 
 Current role:
@@ -139,6 +221,27 @@ Current role:
 - Defines the strict Pydantic schema for `asset_images_manifest.json`
 - Validates per-type generated image metadata and ID ordering
 
+### `schemas/storyboard.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `storyboard.json`
+- Validates shot ID/order sequencing, fixed global video defaults, field enums, and per-shot list limits
+
+### `schemas/shot_reference_manifest.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `shot_reference_manifest.json`
+- Validates per-shot board metadata, template/cell counts, and slot coverage
+
+### `schemas/video_jobs.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `video_jobs.json`
+- Validates job ordering, fixed defaults, prompt-block structure, and ready-vs-blocked URL state
+
 ### `prompts/asset_extraction.py`
 
 Current role:
@@ -164,6 +267,13 @@ Current role:
 
 - Builds deterministic image-generation prompts for reference-board layouts
 - Leaves final text labels to local rendering instead of model-rendered text
+
+### `prompts/storyboard.py`
+
+Current role:
+
+- Stores the production prompt template for storyboard generation
+- Frames `storyboard.json` as a structured shot-planning contract for later board stitching and video-prompt assembly
 
 ### `agentkit.yaml`
 
@@ -221,21 +331,28 @@ The module layout is now partially implemented:
   - `style_bible.py`
   - `asset_prompts.py`
   - `asset_images.py`
-  - later: storyboard, board stitching, video generation, final concat
+  - `storyboard.py`
+  - `shot_reference_boards.py`
+  - `shot_reference_publish.py`
+  - `video_jobs.py`
+  - later: video generation, final concat
 
 - `prompts/`
   - `asset_extraction.py`
   - `style_bible.py`
   - `asset_prompts.py`
   - `asset_images.py`
-  - later: storyboard prompt, video prompt
+  - `storyboard.py`
+  - later: standalone video prompt helpers if needed
 
 - `schemas/`
   - `asset_registry.py`
   - `style_bible.py`
   - `asset_prompts.py`
   - `asset_images_manifest.py`
-  - later: storyboard, video job schemas
+  - `storyboard.py`
+  - `shot_reference_manifest.py`
+  - `video_jobs.py`
 
 - `runs/`
   - generated outputs per execution
@@ -262,6 +379,14 @@ The implemented nodes now write:
 - `runs/runN/05_asset_images/props/...`
 - `runs/runN/05_asset_images/responses/...`
 - `runs/runN/05_asset_images/asset_images_manifest.json`
+- `runs/runN/06_storyboard/storyboard_input_digest.json`
+- `runs/runN/06_storyboard/storyboard_request.json`
+- `runs/runN/06_storyboard/storyboard_response.json`
+- `runs/runN/06_storyboard/storyboard.json`
+- `runs/runN/07_shot_reference_boards/boards/...`
+- `runs/runN/07_shot_reference_boards/board_publish_result.json`
+- `runs/runN/07_shot_reference_boards/shot_reference_manifest.json`
+- `runs/runN/08_video_jobs/video_jobs.json`
 
 ## Model Compatibility Note
 
@@ -272,6 +397,10 @@ The implemented path therefore uses:
 - strict prompt instructions
 - deterministic field alias normalization for known deviations
 - Pydantic validation as the final contract gate
+
+The storyboard node follows the same pattern, with one extra layer:
+
+- cross-file validation against `asset_registry.json` for segment coverage and shot asset references
 
 ## Contract Philosophy
 
