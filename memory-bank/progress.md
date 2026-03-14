@@ -73,6 +73,9 @@ Last updated: 2026-03-14
 - Implemented the stitched shot-board publishing node.
 - Verified locally that non-public board URLs remain blocked from video submission and public-looking board URLs turn all jobs `ready`.
 - Added a jsDelivr-based convenience publisher for free static hosting through a public GitHub repo checkout.
+- Published `run10` shot boards into the current repo's `static/` tree and wrote jsDelivr-style `board_public_url` values back into the manifest.
+- Rebuilt `runs/run10/08_video_jobs/video_jobs.json` after board publication and verified all local jobs now validate as `ready`.
+- Updated [`.gitignore`](/Users/tiangai/研究生/2工作/禹娲传媒/AI studio/.gitignore) so `static/runs/...` board files can be committed while the main `runs/` worktree remains ignored.
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -101,7 +104,7 @@ The project now has:
 
 ## Next Step
 
-- Publish `run10` stitched shot boards to a real stable public URL base for `first_frame`
+- Commit and push the new `static/` board files plus updated manifests to GitHub so jsDelivr can serve them
 - Then start shot-video generation with the generated `video_jobs.json`
 
 ## Known Constraints
@@ -186,6 +189,11 @@ The project now has:
   - publish board PNGs into a public GitHub repo checkout
   - serve them through jsDelivr CDN URLs
   - reuse the same public repo later for a simple static UI if needed
+- `run10` is now locally prepared for that path:
+  - board files exist under `static/runs/run10/07_shot_reference_boards/boards/`
+  - `shot_reference_manifest.json` now contains jsDelivr URLs
+  - `video_jobs.json` now validates with `ready` statuses locally
+  - jsDelivr will only serve the files after these repo changes are committed and pushed
 - The storyboard stage currently uses the same text-model pattern as earlier JSON stages:
   - prompt-constrained JSON output
   - local field-alias normalization

@@ -4,4 +4,6 @@ __pycache__/
 agentkit.local.yaml
 test_outputs/
 runs/
+!static/runs/
+!static/runs/**
 BigBanana-AI-Director-main-2/*

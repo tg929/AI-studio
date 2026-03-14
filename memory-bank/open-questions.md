@@ -18,7 +18,6 @@ These questions are still unresolved and should be reviewed before major impleme
 - Final target resolution for V1: keep at 720p or move higher?
 - Final FPS target for V1?
 - What is the exact prompt guardrail wording to stop the video model from reproducing the board layout?
-- Which public hosting path should publish stitched shot boards so `board_public_url` is stable and directly usable as `first_frame`?
 
 ## Human Review
 

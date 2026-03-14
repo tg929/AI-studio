@@ -184,6 +184,11 @@ Current state:
 - Shot-board publishing is implemented and locally verified.
 - The remaining step before real video submission is to publish `run10` boards to an actually reachable public host/path and rerun `video_jobs`.
 - A free recommended path is now available in code: publish board PNGs to a public GitHub repo checkout and serve them via jsDelivr.
+- `run10` has already been prepared for that path locally:
+  - board PNGs copied into `static/runs/run10/...`
+  - jsDelivr URLs written into `shot_reference_manifest.json`
+  - `video_jobs.json` regenerated with local `ready` statuses
+- The remaining operational step is to commit and push those files so the CDN URLs become live.
 
 ## Step 8: Final Video Concatenation
 
