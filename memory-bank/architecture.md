@@ -103,6 +103,24 @@ Current role:
 - Resolves the matching `shot_reference_manifest.json`, `asset_registry.json`, and `style_bible.json`
 - Generates `video_jobs.json` into the same run directory
 
+### `generate_shot_videos.py`
+
+Current role:
+
+- CLI entrypoint for the shot-video execution node
+- Reads a validated `video_jobs.json`
+- Supports single-shot execution for sample validation before batch runs
+- Generates `shot_videos_manifest.json` plus per-shot request/response/video artifacts
+
+### `generate_final_video.py`
+
+Current role:
+
+- CLI entrypoint for the final-video concatenation node
+- Reads a validated `shot_videos_manifest.json`
+- Concatenates succeeded shot videos into one final mp4
+- Generates `final_video_manifest.json`
+
 ### `publish_shot_reference_boards.py`
 
 Current role:
@@ -201,6 +219,24 @@ Current role:
 - Writes `board_public_url` values using a configured public base URL
 - Records publish results for later video-job generation
 
+### `pipeline/shot_videos.py`
+
+Current role:
+
+- Loads and validates `video_jobs.json`
+- Builds the video-task payload using one shot prompt plus one `first_frame` image URL
+- Submits content-generation tasks to the video model
+- Polls task status, downloads succeeded video files, and writes `shot_videos_manifest.json`
+
+### `pipeline/final_video.py`
+
+Current role:
+
+- Loads and validates `shot_videos_manifest.json`
+- Builds an ffmpeg concat input list from succeeded shot videos
+- Re-encodes and concatenates all shot videos into `final_video.mp4`
+- Writes `final_video_manifest.json`
+
 ### `schemas/asset_registry.py`
 
 Current role:
@@ -249,6 +285,20 @@ Current role:
 
 - Defines the strict Pydantic schema for `video_jobs.json`
 - Validates job ordering, fixed defaults, prompt-block structure, and ready-vs-blocked URL state
+
+### `schemas/shot_videos_manifest.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `shot_videos_manifest.json`
+- Validates per-shot execution results, status values, and sequential ordering
+
+### `schemas/final_video_manifest.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `final_video_manifest.json`
+- Validates concat inputs, final output path metadata, and sequential shot ordering
 
 ### `prompts/asset_extraction.py`
 
@@ -343,7 +393,8 @@ The module layout is now partially implemented:
   - `shot_reference_boards.py`
   - `shot_reference_publish.py`
   - `video_jobs.py`
-  - later: video generation, final concat
+  - `shot_videos.py`
+  - `final_video.py`
 
 - `prompts/`
   - `asset_extraction.py`
@@ -361,6 +412,8 @@ The module layout is now partially implemented:
   - `storyboard.py`
   - `shot_reference_manifest.py`
   - `video_jobs.py`
+  - `shot_videos_manifest.py`
+  - `final_video_manifest.py`
 
 - `runs/`
   - generated outputs per execution
@@ -395,6 +448,13 @@ The implemented nodes now write:
 - `runs/runN/07_shot_reference_boards/board_publish_result.json`
 - `runs/runN/07_shot_reference_boards/shot_reference_manifest.json`
 - `runs/runN/08_video_jobs/video_jobs.json`
+- `runs/runN/09_shot_videos/requests/...`
+- `runs/runN/09_shot_videos/responses/...`
+- `runs/runN/09_shot_videos/videos/...`
+- `runs/runN/09_shot_videos/shot_videos_manifest.json`
+- `runs/runN/10_final/concat_inputs.txt`
+- `runs/runN/10_final/final_video_manifest.json`
+- `runs/runN/10_final/final_video.mp4`
 
 ## Model Compatibility Note
 

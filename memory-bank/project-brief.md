@@ -13,6 +13,11 @@ The system takes a script as input and produces:
 - per-shot videos
 - one final stitched video
 
+Current baseline:
+
+- `run10` is the first end-to-end completed baseline run from script through final stitched video.
+- The current final output is `runs/run10/10_final/final_video.mp4`.
+
 ## Default Input
 
 - Script file: `01-陨落的天才.txt`

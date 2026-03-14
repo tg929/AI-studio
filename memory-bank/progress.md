@@ -76,6 +76,22 @@ Last updated: 2026-03-14
 - Published `run10` shot boards into the current repo's `static/` tree and wrote jsDelivr-style `board_public_url` values back into the manifest.
 - Rebuilt `runs/run10/08_video_jobs/video_jobs.json` after board publication and verified all local jobs now validate as `ready`.
 - Updated [`.gitignore`](/Users/tiangai/研究生/2工作/禹娲传媒/AI studio/.gitignore) so `static/runs/...` board files can be committed while the main `runs/` worktree remains ignored.
+- Verified the published jsDelivr first-frame URL for `run10` returns `HTTP 200`.
+- Implemented the `shot_videos` execution node.
+- Added explicit Pydantic validation for `shot_videos_manifest.json`.
+- Submitted and completed the first real sample video job for `run10`:
+  - `shot_001` succeeded
+  - task id: `cgt-20260314183535-hlsnw`
+  - local output: `runs/run10/09_shot_videos/videos/shot_001.mp4`
+- Batch-ran the remaining real shot-video jobs for `run10`:
+  - `shot_002` through `shot_006` all succeeded
+  - `runs/run10/09_shot_videos/shot_videos_manifest.json` now reports `6/6` succeeded
+- Installed `ffmpeg` locally via Homebrew for final concatenation.
+- Implemented the final-video concatenation node.
+- Added explicit Pydantic validation for `final_video_manifest.json`.
+- Generated the first full final video for `run10`:
+  - `runs/run10/10_final/final_video.mp4`
+  - verified output: `1280x720`, `24 fps`, about `60.33s`
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -100,12 +116,14 @@ The project now has:
 - one working Python video-job assembly node
 - one working Python shot-board publishing node
 - one working Python jsDelivr publishing helper
+- one working Python shot-video execution node
+- one working Python final-video concat node
 - project memory-bank setup
 
 ## Next Step
 
-- Commit and push the new `static/` board files plus updated manifests to GitHub so jsDelivr can serve them
-- Then start shot-video generation with the generated `video_jobs.json`
+- Review the generated final full video for `run10`
+- Then start the simple UI layer on top of the completed run artifacts
 
 ## Known Constraints
 
@@ -194,6 +212,14 @@ The project now has:
   - `shot_reference_manifest.json` now contains jsDelivr URLs
   - `video_jobs.json` now validates with `ready` statuses locally
   - jsDelivr will only serve the files after these repo changes are committed and pushed
+- `run10` now also includes the first real shot-video artifacts under `09_shot_videos/`:
+  - request payload for `shot_001`
+  - created/result task responses for `shot_001`
+  - downloaded local sample video `shot_001.mp4`
+- `run10` now also includes the full final-output stage under `10_final/`:
+  - concat input list
+  - final video manifest
+  - concatenated final video `final_video.mp4`
 - The storyboard stage currently uses the same text-model pattern as earlier JSON stages:
   - prompt-constrained JSON output
   - local field-alias normalization

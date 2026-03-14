@@ -158,7 +158,7 @@ Current state:
 
 ## Step 7: Video Job Assembly and Board Publishing
 
-Status: in progress
+Status: done
 
 Goal:
 
@@ -188,11 +188,36 @@ Current state:
   - board PNGs copied into `static/runs/run10/...`
   - jsDelivr URLs written into `shot_reference_manifest.json`
   - `video_jobs.json` regenerated with local `ready` statuses
-- The remaining operational step is to commit and push those files so the CDN URLs become live.
+- The CDN URLs are now live and returning `HTTP 200`.
 
-## Step 8: Final Video Concatenation
+## Step 8: Shot Video Generation
 
-Status: pending
+Status: done
+
+Goal:
+
+- Generate one video per shot using `shot prompt + stitched board image`.
+
+Outputs:
+
+- `shot_videos/`
+- `shot_videos_manifest.json`
+
+Validation:
+
+- One video per shot is generated successfully.
+- Output duration is close to 10 seconds.
+
+Current state:
+
+- The `shot_videos` node is implemented and verified locally.
+- `runs/run10/09_shot_videos/shot_videos_manifest.json` is now the current shot-video execution baseline.
+- The first real sample video run succeeded for `shot_001`.
+- The remaining ready shots were batch-run successfully and the manifest now records `6/6` succeeded.
+
+## Step 9: Final Video Concatenation
+
+Status: done
 
 Goal:
 
@@ -207,3 +232,9 @@ Validation:
 - Final video is playable.
 - Shot order is correct.
 - No missing segments.
+
+Current state:
+
+- The final-video concat node is implemented and verified.
+- `ffmpeg` is now installed locally and used for concat re-encode plus faststart output.
+- `runs/run10/10_final/final_video.mp4` is the current final-video baseline.
