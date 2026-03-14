@@ -72,6 +72,7 @@ Last updated: 2026-03-14
 - Ran the video-job assembly stage successfully for `run10` and saved the artifacts under `runs/run10/08_video_jobs`.
 - Implemented the stitched shot-board publishing node.
 - Verified locally that non-public board URLs remain blocked from video submission and public-looking board URLs turn all jobs `ready`.
+- Added a jsDelivr-based convenience publisher for free static hosting through a public GitHub repo checkout.
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -95,6 +96,7 @@ The project now has:
 - one working Python shot-reference-board node
 - one working Python video-job assembly node
 - one working Python shot-board publishing node
+- one working Python jsDelivr publishing helper
 - project memory-bank setup
 
 ## Next Step
@@ -180,6 +182,10 @@ The project now has:
   - `localhost` and other non-public URLs stay blocked in `video_jobs`
   - public-looking `https://...` URLs produce `ready` jobs
   - the remaining gap is a real externally reachable host/path for `run10` board files
+- The current recommended free path is:
+  - publish board PNGs into a public GitHub repo checkout
+  - serve them through jsDelivr CDN URLs
+  - reuse the same public repo later for a simple static UI if needed
 - The storyboard stage currently uses the same text-model pattern as earlier JSON stages:
   - prompt-constrained JSON output
   - local field-alias normalization

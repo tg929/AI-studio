@@ -183,6 +183,7 @@ Current state:
 - All current `run10` jobs are blocked only because `shot_reference_manifest.json` still has empty `board_public_url` values.
 - Shot-board publishing is implemented and locally verified.
 - The remaining step before real video submission is to publish `run10` boards to an actually reachable public host/path and rerun `video_jobs`.
+- A free recommended path is now available in code: publish board PNGs to a public GitHub repo checkout and serve them via jsDelivr.
 
 ## Step 8: Final Video Concatenation
 

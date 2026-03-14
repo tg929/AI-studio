@@ -112,6 +112,14 @@ Current role:
 - Copies stitched board PNGs into a configured static-root directory
 - Writes `board_public_url` values back into the manifest
 
+### `publish_shot_reference_boards_to_jsdelivr.py`
+
+Current role:
+
+- Convenience CLI for the free GitHub-plus-jsDelivr publishing path
+- Infers `owner/repo` and branch from a target public GitHub repo checkout
+- Reuses the generic board publisher to generate jsDelivr-backed `board_public_url` values
+
 ### `pipeline/style_bible.py`
 
 Current role:
