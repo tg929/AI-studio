@@ -27,9 +27,10 @@ Current role:
 
 Current role:
 
-- CLI entrypoint for the new optional upstream intent-to-script node
+- CLI entrypoint for the new optional upstream route-guided intent-to-script node
 - Accepts keywords, a brief, or a full script
-- Generates `00_source/*` artifacts and writes a normalized `01_input/script_clean.txt`
+- Generates `00_source/*` artifacts including routing and readiness outputs
+- Writes a normalized `01_input/script_clean.txt` when a script candidate is available
 - Can optionally continue into asset extraction in the same run directory
 
 ### `pipeline/runtime.py`
@@ -66,11 +67,38 @@ Current role:
 
 - Builds the new `00_source/` upstream stage
 - Writes `source_input.txt` and `source_context.json`
-- Generates `intent_packet.json`
-- Generates `story_blueprint.json`
-- Generates `generated_script.txt`
-- Generates `script_quality_report.json`
-- Writes the generated script into `01_input/script_clean.txt` for downstream reuse
+- Generates `intake_router.json`
+- Uses the old length-based input detection only as `fallback_input_mode`
+- Stops early when the router chooses `confirm_then_continue`
+- Reuses the normalized source text directly when the router chooses `direct_extract`
+- Generates `intent_packet.json`, `story_blueprint.json`, and `generated_script.txt` for transform paths
+- Generates `script_quality_report.json` for generated-script paths
+- Generates `asset_readiness_report.json` before asset extraction
+- Writes the current script candidate into `01_input/script_clean.txt` for downstream reuse
+
+### `prompts/intake_router.py`
+
+Current role:
+
+- Defines the system and user prompts for `intake_router.json`
+
+### `prompts/asset_readiness.py`
+
+Current role:
+
+- Defines the system and user prompts for `asset_readiness_report.json`
+
+### `schemas/intake_router.py`
+
+Current role:
+
+- Validates route choice, allowed operation combinations, and confirmation behavior for `intake_router.json`
+
+### `schemas/asset_readiness.py`
+
+Current role:
+
+- Validates extraction-readiness scoring and downstream gating semantics for `asset_readiness_report.json`
 
 ### `generate_style_bible.py`
 

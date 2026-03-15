@@ -11,7 +11,7 @@ from pipeline.runtime import load_text_model_config
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a production-ready script from keywords or a short brief."
+        description="Run the route-guided upstream workflow from keywords, brief, or script input."
     )
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
@@ -100,11 +100,21 @@ def main() -> int:
     print(f"Input artifacts: {artifacts.input_dir}")
     if artifacts.asset_dir is not None:
         print(f"Asset artifacts: {artifacts.asset_dir}")
+    print(f"Intake router: {artifacts.source_dir / 'intake_router.json'}")
     if args.dry_run:
         print("Dry run completed.")
     else:
-        print(f"Generated script: {artifacts.source_dir / 'generated_script.txt'}")
-        print(f"Script quality report: {artifacts.source_dir / 'script_quality_report.json'}")
+        generated_script_path = artifacts.source_dir / "generated_script.txt"
+        script_quality_path = artifacts.source_dir / "script_quality_report.json"
+        asset_readiness_path = artifacts.source_dir / "asset_readiness_report.json"
+        if generated_script_path.exists():
+            print(f"Generated script: {generated_script_path}")
+        else:
+            print("Generated script: not produced")
+        if script_quality_path.exists():
+            print(f"Script quality report: {script_quality_path}")
+        if asset_readiness_path.exists():
+            print(f"Asset readiness report: {asset_readiness_path}")
     return 0
 
 

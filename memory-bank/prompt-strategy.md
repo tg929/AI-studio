@@ -26,7 +26,19 @@ Ideas we should not copy directly:
 
 ## Current Prompt Families for This Project
 
-### 1. Intent Understanding Prompt
+### 1. Intake Router Prompt
+
+Purpose:
+
+- Decide which upstream path is most suitable for stable asset extraction under the current project spec.
+
+Required behavior:
+
+- Output valid JSON only
+- Judge user goal, source form, material state, and route choice separately
+- Prefer the minimum necessary transform before asset extraction
+
+### 2. Intent Understanding Prompt
 
 Purpose:
 
@@ -38,7 +50,7 @@ Required behavior:
 - Preserve the user's stated intent and separate it from assumptions
 - Lock the short-form target spec before story expansion
 
-### 2. Story Blueprint Prompt
+### 3. Story Blueprint Prompt
 
 Purpose:
 
@@ -50,11 +62,11 @@ Required behavior:
 - Keep character / scene / prop counts controlled
 - Produce a beat sheet that is asset-friendly and storyboard-friendly
 
-### 3. Script Generation Prompt
+### 4. Script Generation Prompt
 
 Purpose:
 
-- Convert `intent_packet.json + story_blueprint.json` into a full script that downstream asset extraction can use directly.
+- Convert `intent_packet.json + story_blueprint.json + intake_router.json` into an asset-ready script candidate.
 
 Required behavior:
 
@@ -62,7 +74,7 @@ Required behavior:
 - Stay visually concrete enough for asset extraction
 - Preserve the blueprint's role / scene / prop constraints
 
-### 4. Script Quality Prompt
+### 5. Script Quality Prompt
 
 Purpose:
 
@@ -74,7 +86,19 @@ Required behavior:
 - Check whether the script stays within the short-form production envelope
 - Surface repair instructions instead of silently letting weak scripts continue
 
-### 5. Asset Extraction Prompt
+### 6. Asset Readiness Prompt
+
+Purpose:
+
+- Judge whether the current script candidate is stable enough for asset extraction.
+
+Required behavior:
+
+- Output valid JSON only
+- Score extraction-critical dimensions rather than literary quality
+- Gate downstream asset extraction when readiness is too low
+
+### 7. Asset Extraction Prompt
 
 Purpose:
 
@@ -86,7 +110,7 @@ Required behavior:
 - No creative expansion beyond the script unless explicitly needed
 - Deduplicate recurring assets
 
-### 6. Asset Image Prompt
+### 8. Asset Image Prompt
 
 Purpose:
 
@@ -98,7 +122,7 @@ Required behavior:
 - Produce prompts separately for character, scene, and prop assets
 - Respect the project's labeled asset format
 
-### 7. Storyboard Prompt
+### 9. Storyboard Prompt
 
 Purpose:
 
@@ -110,7 +134,7 @@ Required behavior:
 - Each shot must reference existing asset IDs
 - Each shot has one prompt suitable for video generation
 
-### 8. Video Prompt
+### 10. Video Prompt
 
 Purpose:
 
@@ -126,6 +150,7 @@ Required behavior:
 ## Current Project-Specific Prompt Constraints
 
 - The short-intent upstream path should converge to a roughly `60s`, `6-shot` micro-script before entering asset extraction.
+- Upstream route selection should be explicit JSON, not hidden inside prompt-only branching.
 - Asset images are labeled.
 - Shot duration is fixed at 10 seconds.
 - The stitched board contains only the assets used in that shot.

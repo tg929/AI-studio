@@ -132,6 +132,24 @@ Last updated: 2026-03-15
   - `00_source/generated_script.txt`
   - `00_source/script_quality_report.json`
   - `01_input/script_clean.txt`
+- Added route-first upstream control for the intent path:
+  - implemented `schemas/intake_router.py`
+  - implemented `prompts/intake_router.py`
+  - integrated `intake_router.json` generation into `pipeline/intent_to_script.py`
+- Added an explicit pre-extraction readiness gate for the upstream script candidate:
+  - implemented `schemas/asset_readiness.py`
+  - implemented `prompts/asset_readiness.py`
+  - integrated `asset_readiness_report.json` generation into `pipeline/intent_to_script.py`
+- The upstream intent path now behaves as follows:
+  - route first
+  - `direct_extract` reuses normalized source text without upstream rewrite
+  - `confirm_then_continue` stops after router artifacts
+  - transform paths continue through intent understanding, blueprint, script generation, and readiness
+- Local verification for the new route/readiness layer completed:
+  - `python3 -m compileall schemas prompts pipeline generate_script_from_intent.py`
+  - dry-run artifact generation under `/private/tmp/intent-router-smoke`
+  - confirmed `source_context.json` now records `fallback_input_mode` and `project_target`
+  - confirmed `intake_router_request.json` is now the first-stage request payload
 - The first real `run11` script-quality result passed all hard checks:
   - `passes_hard_checks = true`
   - `repair_needed = false`
@@ -145,7 +163,7 @@ Last updated: 2026-03-15
 
 ## Current Phase
 
-Workflow completion and interview-alignment cleanup.
+Workflow completion, upstream routing hardening, and interview-alignment cleanup.
 
 The project now has:
 
@@ -163,12 +181,15 @@ The project now has:
 - one working Python shot-video execution node
 - one working Python final-video concat node
 - one working Python intent-to-script upstream node
+- one working Python intake-router upstream node
+- one working Python asset-readiness gate for upstream script candidates
 - project memory-bank setup
 
 ## Next Step
 
+- Run the first real end-to-end sample through the new router-guided upstream path.
+- Decide whether the first repair pass after `asset_readiness_report.json` should be automatic or confirmation-gated.
 - Add a unified user-facing entrypoint that supports `script|storyboard` output selection.
-- Insert an explicit synopsis-confirmation gate before full-script generation in the intent-to-script path.
 - Replace the current generic AgentKit demo shell with a short-drama workflow wrapper suited to the interview brief.
 - Prepare an interview-facing README / demo flow / talk track around `run12`.
 
@@ -188,11 +209,16 @@ The project now has:
 - `agentkit.local.yaml` contains local model settings and must remain uncommitted.
 - `BigBanana-AI-Director-main-2/` is gitignored here and used only as a local reference copy.
 - The current text model does not support `response_format={"type":"json_object"}`.
-- The new intent-to-script path currently has four text stages:
+- The new intent-to-script path now starts with two route-control stages:
+  - intake routing
+  - asset-readiness review
+- Generated-script paths still use four text stages in the middle:
   - intent understanding
   - story blueprint
   - script generation
   - script quality review
+- `pipeline/intent_to_script.py` now treats the old heuristic `detect_input_mode()` only as a fallback hint for routing and prompt defaults.
+- The first automatic repair pass after `asset_readiness_report.json` is not implemented yet.
 - The first verification for the new intent-to-script path is a dry run only; the first real sample generation is still pending.
 - The first real sample for the new intent-to-script path has now completed under `runs/run11`.
 - During the first real `run11` attempt, the story-blueprint stage exposed a practical drift case:

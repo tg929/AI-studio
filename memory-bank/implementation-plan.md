@@ -22,20 +22,25 @@ Status: in progress
 Goal:
 
 - Accept keywords, a short brief, or a full script as upstream source input.
-- Convert short input into a production-ready full script before the existing asset-extraction flow.
+- Route the input through the minimum necessary upstream path before the existing asset-extraction flow.
+- Convert or reuse the input into an asset-ready script candidate.
 
 Outputs:
 
+- `00_source/intake_router.json`
 - `00_source/intent_packet.json`
 - `00_source/story_blueprint.json`
 - `00_source/generated_script.txt`
 - `00_source/script_quality_report.json`
+- `00_source/asset_readiness_report.json`
 - `01_input/script_clean.txt`
 
 Validation:
 
-- Dry run writes `00_source/source_input.txt`, `00_source/source_context.json`, and the first-stage request payload.
-- A full run should produce validated JSON artifacts plus a usable generated script under the same run directory.
+- Dry run writes `00_source/source_input.txt`, `00_source/source_context.json`, and `00_source/intake_router_request.json`.
+- A full run should produce validated route artifacts plus either:
+  - a usable generated script under the same run directory
+  - or an explicit confirmation stop at the router stage
 
 ## Step 1: Asset Schema and Asset Extraction Prompt
 

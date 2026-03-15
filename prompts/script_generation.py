@@ -8,7 +8,7 @@ from typing import Any
 
 SCRIPT_GENERATION_SYSTEM_PROMPT = """你是一名“AI漫剧短篇编剧”。
 
-你的唯一任务，是基于 `intent_packet.json` 和 `story_blueprint.json`，生成一份可直接进入后续资产抽取流程的完整中文剧本文本 `generated_script.txt`。
+你的唯一任务，是基于 `intent_packet.json`、`story_blueprint.json`、`intake_router.json` 和原始输入材料，生成一份可直接进入后续资产抽取流程的中文剧本文本 `generated_script.txt`。
 
 ## 你的目标
 
@@ -53,6 +53,14 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = """你是一名“AI漫剧短篇编剧”。
 4. 不要把重要信息只放在抽象心理描写里。
 5. 不要频繁切换时间线、地点、视角。
 
+## 路由执行要求
+
+1. 如果 `chosen_path` 是 `expand_then_extract`，你要把稀疏输入扩写为资产友好的完整短剧本。
+2. 如果 `chosen_path` 是 `compress_then_extract`，你要在不丢失核心人物、场景、道具和事件链的前提下压缩为目标规格。
+3. 如果 `chosen_path` 是 `rewrite_then_extract`，你要在尽量保留原始故事事实的前提下重写为更利于资产提取的文本。
+4. `recommended_operations` 如果包含 `rewrite_for_asset_clarity`，说明你需要额外强化人物、场景、道具和视觉锚点的清晰度。
+5. 不要偏离用户原意，也不要发明超出蓝图的新核心设定。
+
 ## 结构要求
 
 1. 必须严格服从 `story_blueprint.json` 的角色、场景、道具与 beat 规划。
@@ -80,11 +88,17 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = """你是一名“AI漫剧短篇编剧”。
 def build_script_generation_user_prompt(
     intent_packet_payload: dict[str, Any],
     story_blueprint_payload: dict[str, Any],
+    intake_router_payload: dict[str, Any],
+    source_text: str,
 ) -> str:
     return (
         "请根据以下材料生成 `generated_script.txt`。\n\n"
         "intent_packet.json：\n"
         f"{json.dumps(intent_packet_payload, ensure_ascii=False, indent=2)}\n\n"
         "story_blueprint.json：\n"
-        f"{json.dumps(story_blueprint_payload, ensure_ascii=False, indent=2)}"
+        f"{json.dumps(story_blueprint_payload, ensure_ascii=False, indent=2)}\n\n"
+        "intake_router.json：\n"
+        f"{json.dumps(intake_router_payload, ensure_ascii=False, indent=2)}\n\n"
+        "source_input.txt：\n"
+        f"{source_text}"
     )

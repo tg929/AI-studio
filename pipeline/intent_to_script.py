@@ -16,6 +16,8 @@ from pipeline.asset_extraction import (
 )
 from pipeline.io import dump_model, extract_text_content, write_json
 from pipeline.runtime import TextModelConfig, build_text_client
+from prompts.asset_readiness import ASSET_READINESS_SYSTEM_PROMPT, build_asset_readiness_user_prompt
+from prompts.intake_router import INTAKE_ROUTER_SYSTEM_PROMPT, build_intake_router_user_prompt
 from prompts.intent_understanding import (
     INTENT_UNDERSTANDING_SYSTEM_PROMPT,
     build_intent_understanding_user_prompt,
@@ -23,6 +25,8 @@ from prompts.intent_understanding import (
 from prompts.script_generation import SCRIPT_GENERATION_SYSTEM_PROMPT, build_script_generation_user_prompt
 from prompts.script_quality import SCRIPT_QUALITY_SYSTEM_PROMPT, build_script_quality_user_prompt
 from prompts.story_blueprint import STORY_BLUEPRINT_SYSTEM_PROMPT, build_story_blueprint_user_prompt
+from schemas.asset_readiness import AssetReadinessReport
+from schemas.intake_router import IntakeRouter
 from schemas.intent_packet import IntentPacket
 from schemas.script_quality import ScriptQualityReport
 from schemas.story_blueprint import StoryBlueprint
@@ -161,12 +165,22 @@ def default_target_spec(*, input_mode: str, source_text: str) -> dict[str, Any]:
     }
 
 
+def default_project_target(*, input_mode: str, source_text: str) -> dict[str, Any]:
+    target_spec = default_target_spec(input_mode=input_mode, source_text=source_text)
+    return {
+        "target_runtime_sec": target_spec["target_runtime_sec"],
+        "target_shot_count": target_spec["target_shot_count"],
+        "target_script_length_chars": target_spec["target_script_length_chars"],
+        "shot_duration_sec": 10,
+    }
+
+
 def build_source_context(
     *,
     source_script_name: str,
     source_text: str,
     requested_input_mode: str,
-    resolved_input_mode: str,
+    fallback_input_mode: str,
     source_path: Path | None,
 ) -> dict[str, Any]:
     paragraphs = [block for block in source_text.split("\n\n") if block.strip()]
@@ -174,13 +188,47 @@ def build_source_context(
     return {
         "source_script_name": source_script_name,
         "requested_input_mode": requested_input_mode,
-        "resolved_input_mode": resolved_input_mode,
+        "fallback_input_mode": fallback_input_mode,
         "source_path": str(source_path.resolve()) if source_path is not None else "",
         "character_count": len(source_text),
         "line_count": len(lines),
         "paragraph_count": len(paragraphs),
-        "default_target_spec": default_target_spec(input_mode=resolved_input_mode, source_text=source_text),
+        "default_target_spec": default_target_spec(input_mode=fallback_input_mode, source_text=source_text),
+        "project_target": default_project_target(input_mode=fallback_input_mode, source_text=source_text),
     }
+
+
+def resolve_intent_input_mode(
+    *,
+    requested_input_mode: str,
+    fallback_input_mode: str,
+    source_form: str,
+) -> str:
+    if requested_input_mode != AUTO_INPUT_MODE:
+        return requested_input_mode
+    source_form_mapping = {
+        "keywords": "keywords",
+        "brief": "brief",
+        "partial_script": "brief",
+        "full_script": "script",
+        "mixed": fallback_input_mode,
+    }
+    return source_form_mapping.get(source_form, fallback_input_mode)
+
+
+def generation_mode_from_path(chosen_path: str) -> str:
+    return {
+        "expand_then_extract": "expanded_from_input",
+        "compress_then_extract": "compressed_from_input",
+        "rewrite_then_extract": "rewritten_for_asset_clarity",
+        "direct_extract": "direct_extract_reuse_source",
+    }.get(chosen_path, "unknown")
+
+
+def evaluated_text_kind_from_path(chosen_path: str) -> str:
+    if chosen_path == "direct_extract":
+        return "raw_input"
+    return "transformed_script"
 
 
 def read_json_string(value: str) -> dict[str, Any]:
@@ -340,6 +388,358 @@ def normalize_intent_packet_payload(
     normalized["assumptions"] = split_string_list(normalized.get("assumptions"))
     normalized["ambiguities"] = split_string_list(normalized.get("ambiguities"))
     normalized["target_spec"] = target_spec
+    return normalized
+
+
+def normalize_intake_router_payload(
+    payload: dict[str, Any],
+    *,
+    source_script_name: str,
+    source_context: dict[str, Any],
+) -> dict[str, Any]:
+    normalized = dict(payload)
+
+    alias_map = {
+        "sourceScriptName": "source_script_name",
+        "userGoal": "user_goal",
+        "sourceForm": "source_form",
+        "materialState": "material_state",
+        "projectTarget": "project_target",
+        "assetReadinessEstimate": "asset_readiness_estimate",
+        "chosenPath": "chosen_path",
+        "recommendedOperations": "recommended_operations",
+        "missingCriticalInfo": "missing_critical_info",
+        "needsConfirmation": "needs_confirmation",
+        "confirmationPoints": "confirmation_points",
+    }
+    for alias, target in alias_map.items():
+        if target not in normalized and alias in normalized:
+            normalized[target] = normalized.pop(alias)
+
+    project_target = normalized.get("project_target")
+    if not isinstance(project_target, dict):
+        project_target = {}
+    else:
+        project_target = dict(project_target)
+    project_aliases = {
+        "targetRuntimeSec": "target_runtime_sec",
+        "targetShotCount": "target_shot_count",
+        "targetScriptLengthChars": "target_script_length_chars",
+        "shotDurationSec": "shot_duration_sec",
+    }
+    for alias, target in project_aliases.items():
+        if target not in project_target and alias in project_target:
+            project_target[target] = project_target.pop(alias)
+
+    default_project = dict(source_context.get("project_target", {}))
+    project_target["target_runtime_sec"] = normalize_int(
+        project_target.get("target_runtime_sec"),
+        default=int(default_project.get("target_runtime_sec", 60)),
+        minimum=30,
+        maximum=180,
+    )
+    project_target["target_shot_count"] = normalize_int(
+        project_target.get("target_shot_count"),
+        default=int(default_project.get("target_shot_count", 6)),
+        minimum=3,
+        maximum=12,
+    )
+    project_target["target_script_length_chars"] = normalize_int(
+        project_target.get("target_script_length_chars"),
+        default=int(default_project.get("target_script_length_chars", 2600)),
+        minimum=800,
+        maximum=6000,
+    )
+    project_target["shot_duration_sec"] = normalize_int(
+        project_target.get("shot_duration_sec"),
+        default=int(default_project.get("shot_duration_sec", 10)),
+        minimum=1,
+        maximum=30,
+    )
+
+    fallback_input_mode = str(source_context.get("fallback_input_mode", "brief")).strip() or "brief"
+    default_source_form = {
+        "keywords": "keywords",
+        "brief": "brief",
+        "script": "full_script",
+    }.get(fallback_input_mode, "brief")
+    default_material_state = {
+        "keywords": "idea_only",
+        "brief": "synopsis_like",
+        "full_script": "script_like",
+    }[default_source_form]
+    default_path = {
+        "keywords": "expand_then_extract",
+        "brief": "expand_then_extract",
+        "full_script": "direct_extract",
+    }[default_source_form]
+    default_readiness = {
+        "keywords": "low",
+        "brief": "medium",
+        "full_script": "medium",
+    }[default_source_form]
+
+    normalized["schema_version"] = "1.0"
+    normalized["source_script_name"] = source_script_name
+    normalized["user_goal"] = normalize_choice(
+        normalized.get("user_goal"),
+        {
+            "auto": "auto",
+            "create_story": "create_story",
+            "expand_input": "expand_input",
+            "compress_input": "compress_input",
+            "rewrite_for_visuals": "rewrite_for_visuals",
+            "extract_assets": "extract_assets",
+            "创作故事": "create_story",
+            "扩写": "expand_input",
+            "缩写": "compress_input",
+            "压缩": "compress_input",
+            "重写": "rewrite_for_visuals",
+            "抽资产": "extract_assets",
+        },
+        "auto",
+    )
+    normalized["source_form"] = normalize_choice(
+        normalized.get("source_form"),
+        {
+            "keywords": "keywords",
+            "brief": "brief",
+            "partial_script": "partial_script",
+            "full_script": "full_script",
+            "script": "full_script",
+            "mixed": "mixed",
+            "关键词": "keywords",
+            "简述": "brief",
+            "概要": "brief",
+            "半成品剧本": "partial_script",
+            "完整剧本": "full_script",
+            "混合": "mixed",
+        },
+        default_source_form,
+    )
+    normalized["material_state"] = normalize_choice(
+        normalized.get("material_state"),
+        {
+            "idea_only": "idea_only",
+            "synopsis_like": "synopsis_like",
+            "outline_like": "outline_like",
+            "script_like": "script_like",
+            "asset_ready_script": "asset_ready_script",
+            "想法": "idea_only",
+            "概要": "synopsis_like",
+            "大纲": "outline_like",
+            "剧本": "script_like",
+            "可直接抽资产": "asset_ready_script",
+        },
+        default_material_state,
+    )
+    normalized["asset_readiness_estimate"] = normalize_choice(
+        normalized.get("asset_readiness_estimate"),
+        {
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "低": "low",
+            "中": "medium",
+            "中等": "medium",
+            "高": "high",
+        },
+        default_readiness,
+    )
+    normalized["chosen_path"] = normalize_choice(
+        normalized.get("chosen_path"),
+        {
+            "expand_then_extract": "expand_then_extract",
+            "compress_then_extract": "compress_then_extract",
+            "rewrite_then_extract": "rewrite_then_extract",
+            "direct_extract": "direct_extract",
+            "confirm_then_continue": "confirm_then_continue",
+            "expand": "expand_then_extract",
+            "compress": "compress_then_extract",
+            "rewrite": "rewrite_then_extract",
+            "reuse_script": "direct_extract",
+            "confirm": "confirm_then_continue",
+            "直接抽取": "direct_extract",
+            "扩写后抽取": "expand_then_extract",
+            "压缩后抽取": "compress_then_extract",
+            "重写后抽取": "rewrite_then_extract",
+            "先确认再继续": "confirm_then_continue",
+        },
+        default_path,
+    )
+
+    operation_map = {
+        "expand": "expand",
+        "compress": "compress",
+        "rewrite_for_asset_clarity": "rewrite_for_asset_clarity",
+        "rewrite": "rewrite_for_asset_clarity",
+        "扩写": "expand",
+        "压缩": "compress",
+        "缩写": "compress",
+        "重写": "rewrite_for_asset_clarity",
+        "资产清晰化重写": "rewrite_for_asset_clarity",
+    }
+    operations = []
+    for item in split_string_list(normalized.get("recommended_operations")):
+        mapped = operation_map.get(item.strip().lower()) or operation_map.get(item.strip())
+        if mapped:
+            operations.append(mapped)
+    operations = unique_preserve_order(operations)
+    if not operations:
+        operations = {
+            "expand_then_extract": ["expand"],
+            "compress_then_extract": ["compress"],
+            "rewrite_then_extract": ["rewrite_for_asset_clarity"],
+            "direct_extract": [],
+            "confirm_then_continue": [],
+        }[normalized["chosen_path"]]
+    normalized["recommended_operations"] = operations[:2]
+    normalized["reasons"] = split_string_list(normalized.get("reasons"))
+    normalized["risks"] = split_string_list(normalized.get("risks"))
+    normalized["missing_critical_info"] = split_string_list(normalized.get("missing_critical_info"))
+    normalized["needs_confirmation"] = normalize_bool(normalized.get("needs_confirmation")) or (
+        normalized["chosen_path"] == "confirm_then_continue"
+    )
+    normalized["confirmation_points"] = split_string_list(normalized.get("confirmation_points"))
+    normalized["project_target"] = project_target
+    return normalized
+
+
+def normalize_asset_readiness_payload(
+    payload: dict[str, Any],
+    *,
+    source_script_name: str,
+    evaluated_text_kind: str,
+) -> dict[str, Any]:
+    normalized = dict(payload)
+
+    alias_map = {
+        "sourceScriptName": "source_script_name",
+        "evaluatedTextKind": "evaluated_text_kind",
+        "overallStatus": "overall_status",
+        "safeToExtract": "safe_to_extract",
+        "dimensionScores": "dimension_scores",
+        "blockingIssues": "blocking_issues",
+        "suggestedNextAction": "suggested_next_action",
+        "repairFocus": "repair_focus",
+    }
+    for alias, target in alias_map.items():
+        if target not in normalized and alias in normalized:
+            normalized[target] = normalized.pop(alias)
+
+    dimension_scores = normalized.get("dimension_scores")
+    if not isinstance(dimension_scores, dict):
+        dimension_scores = {}
+    else:
+        dimension_scores = dict(dimension_scores)
+    score_aliases = {
+        "characterClarity": "character_clarity",
+        "sceneClarity": "scene_clarity",
+        "propClarity": "prop_clarity",
+        "visualAnchorDensity": "visual_anchor_density",
+        "eventChainCoherence": "event_chain_coherence",
+        "specFitFor60s6shots": "spec_fit_for_60s_6shots",
+        "ambiguityRisk": "ambiguity_risk",
+        "extractionStability": "extraction_stability",
+    }
+    for alias, target in score_aliases.items():
+        if target not in dimension_scores and alias in dimension_scores:
+            dimension_scores[target] = dimension_scores.pop(alias)
+
+    strength_map = {
+        "weak": "weak",
+        "usable": "usable",
+        "strong": "strong",
+        "弱": "weak",
+        "可用": "usable",
+        "强": "strong",
+    }
+    ambiguity_map = {
+        "high": "high",
+        "medium": "medium",
+        "low": "low",
+        "高": "high",
+        "中": "medium",
+        "中等": "medium",
+        "低": "low",
+    }
+    dimension_scores = {
+        "character_clarity": normalize_choice(dimension_scores.get("character_clarity"), strength_map, "usable"),
+        "scene_clarity": normalize_choice(dimension_scores.get("scene_clarity"), strength_map, "usable"),
+        "prop_clarity": normalize_choice(dimension_scores.get("prop_clarity"), strength_map, "usable"),
+        "visual_anchor_density": normalize_choice(
+            dimension_scores.get("visual_anchor_density"),
+            strength_map,
+            "usable",
+        ),
+        "event_chain_coherence": normalize_choice(
+            dimension_scores.get("event_chain_coherence"),
+            strength_map,
+            "usable",
+        ),
+        "spec_fit_for_60s_6shots": normalize_choice(
+            dimension_scores.get("spec_fit_for_60s_6shots"),
+            strength_map,
+            "usable",
+        ),
+        "ambiguity_risk": normalize_choice(dimension_scores.get("ambiguity_risk"), ambiguity_map, "medium"),
+        "extraction_stability": normalize_choice(
+            dimension_scores.get("extraction_stability"),
+            strength_map,
+            "usable",
+        ),
+    }
+
+    normalized["schema_version"] = "1.0"
+    normalized["source_script_name"] = source_script_name
+    normalized["evaluated_text_kind"] = normalize_choice(
+        normalized.get("evaluated_text_kind"),
+        {
+            "raw_input": "raw_input",
+            "transformed_script": "transformed_script",
+            "原始输入": "raw_input",
+            "改写后文本": "transformed_script",
+        },
+        evaluated_text_kind,
+    )
+    normalized["overall_status"] = normalize_choice(
+        normalized.get("overall_status"),
+        {
+            "ready": "ready",
+            "borderline": "borderline",
+            "not_ready": "not_ready",
+            "可直接提取": "ready",
+            "临界": "borderline",
+            "不可提取": "not_ready",
+        },
+        "borderline",
+    )
+    normalized["safe_to_extract"] = normalize_bool(normalized.get("safe_to_extract"))
+    if normalized["overall_status"] == "ready":
+        normalized["safe_to_extract"] = True
+    if normalized["overall_status"] == "not_ready":
+        normalized["safe_to_extract"] = False
+    normalized["dimension_scores"] = dimension_scores
+    normalized["blocking_issues"] = split_string_list(normalized.get("blocking_issues"))
+    normalized["suggested_next_action"] = normalize_choice(
+        normalized.get("suggested_next_action"),
+        {
+            "extract": "extract",
+            "expand": "expand",
+            "compress": "compress",
+            "rewrite_for_asset_clarity": "rewrite_for_asset_clarity",
+            "rewrite": "rewrite_for_asset_clarity",
+            "confirm": "confirm",
+            "提取": "extract",
+            "扩写": "expand",
+            "压缩": "compress",
+            "重写": "rewrite_for_asset_clarity",
+            "确认": "confirm",
+        },
+        "extract" if normalized["safe_to_extract"] else "rewrite_for_asset_clarity",
+    )
+    normalized["repair_focus"] = split_string_list(normalized.get("repair_focus"))
+    normalized["summary"] = str(normalized.get("summary", "")).strip() or "资产提取可用性评估已生成。"
     return normalized
 
 
@@ -632,6 +1032,17 @@ def clean_generated_script_text(content: str) -> str:
     return normalize_script_text(text)
 
 
+def write_stage_skip(path: Path, *, source_script_name: str, reason: str, extra: dict[str, Any] | None = None) -> None:
+    payload = {
+        "source_script_name": source_script_name,
+        "skipped": True,
+        "reason": reason,
+    }
+    if extra:
+        payload.update(extra)
+    write_json(path, payload)
+
+
 def run_text_stage(
     *,
     client: Any,
@@ -684,7 +1095,7 @@ def generate_script_from_intent(
         raise ValueError("Source input is empty after normalization")
 
     requested_input_mode = input_mode
-    resolved_input_mode = input_mode if input_mode != AUTO_INPUT_MODE else detect_input_mode(normalized_source_text)
+    fallback_input_mode = input_mode if input_mode != AUTO_INPUT_MODE else detect_input_mode(normalized_source_text)
     artifacts = build_intent_artifacts(output_root, run_dir)
 
     source_input_path = artifacts.source_dir / "source_input.txt"
@@ -694,104 +1105,170 @@ def generate_script_from_intent(
         source_script_name=source_script_name,
         source_text=normalized_source_text,
         requested_input_mode=requested_input_mode,
-        resolved_input_mode=resolved_input_mode,
+        fallback_input_mode=fallback_input_mode,
         source_path=source_path,
     )
     source_context_path = artifacts.source_dir / "source_context.json"
     write_json(source_context_path, source_context)
 
-    intent_request_path = artifacts.source_dir / "intent_packet_request.json"
-    intent_response_path = artifacts.source_dir / "intent_packet_response.json"
-    intent_user_prompt = build_intent_understanding_user_prompt(source_context, normalized_source_text)
-    intent_request_payload = {
+    intake_router_request_path = artifacts.source_dir / "intake_router_request.json"
+    intake_router_response_path = artifacts.source_dir / "intake_router_response.json"
+    intake_router_path = artifacts.source_dir / "intake_router.json"
+    intake_router_user_prompt = build_intake_router_user_prompt(source_context, normalized_source_text)
+    intake_router_request_payload = {
         "model": model_config.model_name,
         "base_url": model_config.base_url,
-        "system_prompt": INTENT_UNDERSTANDING_SYSTEM_PROMPT,
-        "user_prompt": intent_user_prompt,
+        "system_prompt": INTAKE_ROUTER_SYSTEM_PROMPT,
+        "user_prompt": intake_router_user_prompt,
         "source_script_name": source_script_name,
-        "resolved_input_mode": resolved_input_mode,
+        "fallback_input_mode": fallback_input_mode,
     }
-    write_json(intent_request_path, intent_request_payload)
+    write_json(intake_router_request_path, intake_router_request_payload)
     if dry_run:
         return artifacts
 
     client = build_text_client(model_config)
 
-    intent_content = run_text_stage(
+    intake_router_content = run_text_stage(
         client=client,
         model_config=model_config,
-        system_prompt=INTENT_UNDERSTANDING_SYSTEM_PROMPT,
-        user_prompt=intent_user_prompt,
-        request_path=intent_request_path,
-        response_path=intent_response_path,
+        system_prompt=INTAKE_ROUTER_SYSTEM_PROMPT,
+        user_prompt=intake_router_user_prompt,
+        request_path=intake_router_request_path,
+        response_path=intake_router_response_path,
         request_metadata={
             "source_script_name": source_script_name,
-            "resolved_input_mode": resolved_input_mode,
+            "fallback_input_mode": fallback_input_mode,
+            "stage": "intake_router",
         },
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=2048,
     )
-    intent_packet = IntentPacket.model_validate(
-        normalize_intent_packet_payload(
-            read_json_string(intent_content),
+    intake_router = IntakeRouter.model_validate(
+        normalize_intake_router_payload(
+            read_json_string(intake_router_content),
             source_script_name=source_script_name,
-            source_text=normalized_source_text,
-            resolved_input_mode=resolved_input_mode,
+            source_context=source_context,
         )
     )
-    intent_packet_path = artifacts.source_dir / "intent_packet.json"
-    write_json(intent_packet_path, intent_packet.model_dump(mode="json"))
+    intake_router_payload = intake_router.model_dump(mode="json")
+    write_json(intake_router_path, intake_router_payload)
 
+    intent_request_path = artifacts.source_dir / "intent_packet_request.json"
+    intent_response_path = artifacts.source_dir / "intent_packet_response.json"
     blueprint_request_path = artifacts.source_dir / "story_blueprint_request.json"
     blueprint_response_path = artifacts.source_dir / "story_blueprint_response.json"
-    blueprint_user_prompt = build_story_blueprint_user_prompt(intent_packet.model_dump(mode="json"))
-    blueprint_content = run_text_stage(
-        client=client,
-        model_config=model_config,
-        system_prompt=STORY_BLUEPRINT_SYSTEM_PROMPT,
-        user_prompt=blueprint_user_prompt,
-        request_path=blueprint_request_path,
-        response_path=blueprint_response_path,
-        request_metadata={
-            "source_script_name": source_script_name,
-            "stage": "story_blueprint",
-        },
-        temperature=0.2,
-        max_tokens=4096,
-    )
-    story_blueprint = StoryBlueprint.model_validate(
-        normalize_story_blueprint_payload(
-            read_json_string(blueprint_content),
-            source_script_name=source_script_name,
-        )
-    )
-    story_blueprint_path = artifacts.source_dir / "story_blueprint.json"
-    write_json(story_blueprint_path, story_blueprint.model_dump(mode="json"))
-
     script_generation_request_path = artifacts.source_dir / "script_generation_request.json"
     script_generation_response_path = artifacts.source_dir / "script_generation_response.json"
-    if resolved_input_mode == "script":
-        write_json(
+    quality_request_path = artifacts.source_dir / "script_quality_request.json"
+    quality_response_path = artifacts.source_dir / "script_quality_response.json"
+    asset_readiness_request_path = artifacts.source_dir / "asset_readiness_request.json"
+    asset_readiness_response_path = artifacts.source_dir / "asset_readiness_response.json"
+
+    if intake_router.chosen_path == "confirm_then_continue":
+        skip_reason = "chosen_path=confirm_then_continue, waiting for explicit user confirmation"
+        for path in (
+            intent_request_path,
+            intent_response_path,
+            blueprint_request_path,
+            blueprint_response_path,
             script_generation_request_path,
-            {
-                "source_script_name": source_script_name,
-                "skipped": True,
-                "reason": "resolved_input_mode=script, reuse normalized source input as generated script",
-            },
-        )
-        write_json(
             script_generation_response_path,
-            {
-                "source_script_name": source_script_name,
-                "reused_source_script": True,
-            },
-        )
+            quality_request_path,
+            quality_response_path,
+            asset_readiness_request_path,
+            asset_readiness_response_path,
+        ):
+            write_stage_skip(path, source_script_name=source_script_name, reason=skip_reason)
+        return artifacts
+
+    intent_packet: IntentPacket | None = None
+    story_blueprint: StoryBlueprint | None = None
+    title_for_meta = source_script_name
+    resolved_input_mode = resolve_intent_input_mode(
+        requested_input_mode=requested_input_mode,
+        fallback_input_mode=fallback_input_mode,
+        source_form=intake_router.source_form,
+    )
+
+    if intake_router.chosen_path == "direct_extract":
+        skip_reason = "chosen_path=direct_extract, reuse normalized source input without upstream rewrite"
+        for path in (
+            intent_request_path,
+            intent_response_path,
+            blueprint_request_path,
+            blueprint_response_path,
+            script_generation_request_path,
+            script_generation_response_path,
+            quality_request_path,
+            quality_response_path,
+        ):
+            write_stage_skip(path, source_script_name=source_script_name, reason=skip_reason)
         generated_script_text = normalized_source_text
-        generation_mode = "reused_source_script"
+        generation_mode = generation_mode_from_path(intake_router.chosen_path)
     else:
+        intent_user_prompt = build_intent_understanding_user_prompt(
+            source_context,
+            intake_router_payload,
+            normalized_source_text,
+            resolved_input_mode,
+        )
+        intent_content = run_text_stage(
+            client=client,
+            model_config=model_config,
+            system_prompt=INTENT_UNDERSTANDING_SYSTEM_PROMPT,
+            user_prompt=intent_user_prompt,
+            request_path=intent_request_path,
+            response_path=intent_response_path,
+            request_metadata={
+                "source_script_name": source_script_name,
+                "resolved_input_mode": resolved_input_mode,
+                "stage": "intent_packet",
+                "chosen_path": intake_router.chosen_path,
+            },
+            temperature=0.1,
+            max_tokens=4096,
+        )
+        intent_packet = IntentPacket.model_validate(
+            normalize_intent_packet_payload(
+                read_json_string(intent_content),
+                source_script_name=source_script_name,
+                source_text=normalized_source_text,
+                resolved_input_mode=resolved_input_mode,
+            )
+        )
+        intent_packet_path = artifacts.source_dir / "intent_packet.json"
+        write_json(intent_packet_path, intent_packet.model_dump(mode="json"))
+
+        blueprint_user_prompt = build_story_blueprint_user_prompt(intent_packet.model_dump(mode="json"))
+        blueprint_content = run_text_stage(
+            client=client,
+            model_config=model_config,
+            system_prompt=STORY_BLUEPRINT_SYSTEM_PROMPT,
+            user_prompt=blueprint_user_prompt,
+            request_path=blueprint_request_path,
+            response_path=blueprint_response_path,
+            request_metadata={
+                "source_script_name": source_script_name,
+                "stage": "story_blueprint",
+                "chosen_path": intake_router.chosen_path,
+            },
+            temperature=0.2,
+            max_tokens=4096,
+        )
+        story_blueprint = StoryBlueprint.model_validate(
+            normalize_story_blueprint_payload(
+                read_json_string(blueprint_content),
+                source_script_name=source_script_name,
+            )
+        )
+        write_json(artifacts.source_dir / "story_blueprint.json", story_blueprint.model_dump(mode="json"))
+
         script_generation_user_prompt = build_script_generation_user_prompt(
             intent_packet.model_dump(mode="json"),
             story_blueprint.model_dump(mode="json"),
+            intake_router_payload,
+            normalized_source_text,
         )
         script_generation_content = run_text_stage(
             client=client,
@@ -804,12 +1281,14 @@ def generate_script_from_intent(
                 "source_script_name": source_script_name,
                 "title": story_blueprint.title,
                 "stage": "script_generation",
+                "chosen_path": intake_router.chosen_path,
             },
             temperature=0.5,
             max_tokens=8192,
         )
         generated_script_text = clean_generated_script_text(script_generation_content)
-        generation_mode = "expanded_from_intent"
+        generation_mode = generation_mode_from_path(intake_router.chosen_path)
+        title_for_meta = story_blueprint.title
 
     if not generated_script_text:
         raise ValueError("Generated script text is empty after normalization")
@@ -821,8 +1300,10 @@ def generate_script_from_intent(
         normalized_text=generated_script_text,
         source_path=generated_script_path,
     )
-    generated_script_meta["title"] = story_blueprint.title
+    generated_script_meta["title"] = title_for_meta
     generated_script_meta["generation_mode"] = generation_mode
+    generated_script_meta["chosen_path"] = intake_router.chosen_path
+    generated_script_meta["recommended_operations"] = intake_router.recommended_operations
     write_json(artifacts.source_dir / "generated_script_meta.json", generated_script_meta)
 
     script_clean_payload = create_script_clean_payload(
@@ -835,40 +1316,77 @@ def generate_script_from_intent(
     script_clean_text_path.write_text(generated_script_text, encoding="utf-8")
     write_json(script_clean_json_path, script_clean_payload)
 
-    quality_request_path = artifacts.source_dir / "script_quality_request.json"
-    quality_response_path = artifacts.source_dir / "script_quality_response.json"
-    quality_user_prompt = build_script_quality_user_prompt(
-        intent_packet.model_dump(mode="json"),
-        story_blueprint.model_dump(mode="json"),
+    if intent_packet is not None and story_blueprint is not None:
+        quality_user_prompt = build_script_quality_user_prompt(
+            intent_packet.model_dump(mode="json"),
+            story_blueprint.model_dump(mode="json"),
+            generated_script_text,
+        )
+        quality_content = run_text_stage(
+            client=client,
+            model_config=model_config,
+            system_prompt=SCRIPT_QUALITY_SYSTEM_PROMPT,
+            user_prompt=quality_user_prompt,
+            request_path=quality_request_path,
+            response_path=quality_response_path,
+            request_metadata={
+                "source_script_name": source_script_name,
+                "title": story_blueprint.title,
+                "stage": "script_quality",
+            },
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        quality_report = ScriptQualityReport.model_validate(
+            normalize_script_quality_payload(
+                read_json_string(quality_content),
+                source_script_name=source_script_name,
+                title=story_blueprint.title,
+            )
+        )
+        write_json(artifacts.source_dir / "script_quality_report.json", quality_report.model_dump(mode="json"))
+
+    evaluated_text_kind = evaluated_text_kind_from_path(intake_router.chosen_path)
+    asset_readiness_user_prompt = build_asset_readiness_user_prompt(
+        source_script_name,
+        evaluated_text_kind,
+        intake_router_payload,
         generated_script_text,
     )
-    quality_content = run_text_stage(
+    asset_readiness_content = run_text_stage(
         client=client,
         model_config=model_config,
-        system_prompt=SCRIPT_QUALITY_SYSTEM_PROMPT,
-        user_prompt=quality_user_prompt,
-        request_path=quality_request_path,
-        response_path=quality_response_path,
+        system_prompt=ASSET_READINESS_SYSTEM_PROMPT,
+        user_prompt=asset_readiness_user_prompt,
+        request_path=asset_readiness_request_path,
+        response_path=asset_readiness_response_path,
         request_metadata={
             "source_script_name": source_script_name,
-            "title": story_blueprint.title,
-            "stage": "script_quality",
+            "stage": "asset_readiness",
+            "evaluated_text_kind": evaluated_text_kind,
+            "chosen_path": intake_router.chosen_path,
         },
         temperature=0.0,
         max_tokens=4096,
     )
-    quality_report = ScriptQualityReport.model_validate(
-        normalize_script_quality_payload(
-            read_json_string(quality_content),
+    asset_readiness_report = AssetReadinessReport.model_validate(
+        normalize_asset_readiness_payload(
+            read_json_string(asset_readiness_content),
             source_script_name=source_script_name,
-            title=story_blueprint.title,
+            evaluated_text_kind=evaluated_text_kind,
         )
     )
-    quality_report_path = artifacts.source_dir / "script_quality_report.json"
-    write_json(quality_report_path, quality_report.model_dump(mode="json"))
+    write_json(
+        artifacts.source_dir / "asset_readiness_report.json",
+        asset_readiness_report.model_dump(mode="json"),
+    )
 
     asset_dir: Path | None = None
     if extract_assets:
+        if not asset_readiness_report.safe_to_extract:
+            raise ValueError(
+                "Asset extraction blocked by asset_readiness_report.json because safe_to_extract=false"
+            )
         extraction_artifacts: AssetExtractionArtifacts = extract_asset_registry_from_text(
             source_script_name=source_script_name,
             script_text=generated_script_text,
