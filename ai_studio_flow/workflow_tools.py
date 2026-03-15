@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 from tos import TosClientV2
 from tos.enum import HttpMethodType
 
+from app.workflow_service import WorkflowService
 from pipeline.asset_extraction import extract_asset_registry_from_text, extract_first_json_object
 from pipeline.final_video import (
     DEFAULT_BLACKOUT_LEADING_SECONDS,
@@ -41,6 +42,11 @@ from schemas.shot_reference_manifest import ShotReferenceManifest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_CONFIG_PATH = PROJECT_ROOT / "agentkit.local.yaml"
 DEFAULT_SOURCE_PATH = PROJECT_ROOT / "01-陨落的天才.txt"
+WORKFLOW_SERVICE = WorkflowService(
+    config_path=LOCAL_CONFIG_PATH,
+    output_root=(PROJECT_ROOT / "runs").resolve(),
+    target_repo_root=PROJECT_ROOT,
+)
 
 
 class StoryboardSeedShot(BaseModel):
@@ -178,6 +184,28 @@ def _completed(tool_context: ToolContext, stage: str, run_dir: Path, extra: dict
     if extra:
         payload.update(extra)
     return payload
+
+
+def _apply_service_result(tool_context: ToolContext, result: dict[str, Any]) -> dict[str, Any]:
+    run_dir_value = str(result.get("run_dir", "")).strip()
+    if run_dir_value:
+        tool_context.state["current_run_dir"] = run_dir_value
+    source_script_name = str(result.get("source_script_name", "")).strip()
+    if not source_script_name:
+        run_state = result.get("run_state")
+        if isinstance(run_state, dict):
+            source_script_name = str(run_state.get("source_script_name", "")).strip()
+    if source_script_name:
+        tool_context.state["source_script_name"] = source_script_name
+
+    stage = str(result.get("stage", "")).strip()
+    status = str(result.get("status", "")).strip()
+    if stage:
+        if status == "ok":
+            _set_stage(tool_context, stage)
+        elif status in {"blocked", "failed"}:
+            _set_stage(tool_context, f"{status}:{stage}")
+    return result
 
 
 def _parse_json_object(raw_text: str) -> dict[str, Any]:
@@ -343,6 +371,57 @@ def _check_public_url_reachable(url: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _recover_upstream_for_existing_run(
+    run_dir: Path,
+    *,
+    input_mode: Literal["auto", "keywords", "brief", "script"],
+) -> tuple[str, str]:
+    script_clean_path = run_dir / "01_input" / "script_clean.txt"
+    source_input_path = run_dir / "00_source" / "source_input.txt"
+    source_context_path = run_dir / "00_source" / "source_context.json"
+
+    if script_clean_path.exists():
+        source_script_name = run_dir.name
+        if source_context_path.exists():
+            payload = read_json(source_context_path)
+            if isinstance(payload, dict):
+                source_script_name = str(payload.get("source_script_name", "")).strip() or source_script_name
+        return source_script_name, "Resumed existing run directory without re-running upstream routing."
+
+    if not source_input_path.exists():
+        raise FileNotFoundError(
+            f"Cannot resume {run_dir}: missing both 01_input/script_clean.txt and 00_source/source_input.txt"
+        )
+
+    source_text = source_input_path.read_text(encoding="utf-8")
+    source_script_name = run_dir.name
+    recovery_input_mode = input_mode
+    source_path: Path | None = None
+    if source_context_path.exists():
+        payload = read_json(source_context_path)
+        if isinstance(payload, dict):
+            source_script_name = str(payload.get("source_script_name", "")).strip() or source_script_name
+            if recovery_input_mode == AUTO_INPUT_MODE:
+                recovery_input_mode = str(payload.get("requested_input_mode", "")).strip() or recovery_input_mode
+            raw_source_path = str(payload.get("source_path", "")).strip()
+            if raw_source_path:
+                candidate = Path(raw_source_path).resolve()
+                if candidate.exists():
+                    source_path = candidate
+
+    generate_script_from_intent(
+        source_text=source_text,
+        source_script_name=source_script_name,
+        model_config=_load_text_config(),
+        output_root=(PROJECT_ROOT / "runs").resolve(),
+        run_dir=run_dir,
+        source_path=source_path,
+        input_mode=recovery_input_mode,
+        extract_assets=False,
+    )
+    return source_script_name, "Recovered upstream artifacts for an existing run directory before resuming."
+
+
 def start_or_resume_workflow(
     source_text: str = "",
     source_path: str = "",
@@ -354,53 +433,14 @@ def start_or_resume_workflow(
     """Start the full workflow from user input, or resume an existing run directory."""
 
     assert tool_context is not None
-
-    if run_dir.strip():
-        resumed_run_dir = Path(run_dir).resolve()
-        if not resumed_run_dir.exists():
-            return _blocked(tool_context, "start_or_resume_workflow", f"run_dir not found: {resumed_run_dir}")
-        tool_context.state["current_run_dir"] = str(resumed_run_dir)
-        tool_context.state["source_script_name"] = source_script_name.strip() or resumed_run_dir.name
-        return _completed(
-            tool_context,
-            "workflow_resumed",
-            resumed_run_dir,
-            {"message": "Resumed existing run directory without re-running upstream routing."},
-        )
-
-    resolved_source_path: Path | None = None
-    if source_text.strip():
-        effective_source_text = source_text
-        effective_source_name = source_script_name.strip() or "intent_input"
-    else:
-        resolved_source_path = Path(source_path).resolve() if source_path.strip() else DEFAULT_SOURCE_PATH.resolve()
-        if not resolved_source_path.exists():
-            return _blocked(tool_context, "start_or_resume_workflow", f"source file not found: {resolved_source_path}")
-        effective_source_text = resolved_source_path.read_text(encoding="utf-8")
-        effective_source_name = source_script_name.strip() or resolved_source_path.stem
-
-    artifacts = generate_script_from_intent(
-        source_text=effective_source_text,
-        source_script_name=effective_source_name,
-        model_config=_load_text_config(),
-        output_root=(PROJECT_ROOT / "runs").resolve(),
-        run_dir=None,
-        source_path=resolved_source_path,
+    result = WORKFLOW_SERVICE.start_or_resume(
+        source_text=source_text,
+        source_path=source_path,
+        source_script_name=source_script_name,
         input_mode=input_mode,
-        extract_assets=False,
+        run_dir=run_dir,
     )
-    run_dir_path = artifacts.run_dir.resolve()
-    tool_context.state["current_run_dir"] = str(run_dir_path)
-    tool_context.state["source_script_name"] = effective_source_name
-    return _completed(
-        tool_context,
-        "input_routed",
-        run_dir_path,
-        {
-            "message": "Upstream intake routing finished. Downstream workflow can continue from script_clean.txt.",
-            "source_script_name": effective_source_name,
-        },
-    )
+    return _apply_service_result(tool_context, result)
 
 
 def run_asset_extraction_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -410,22 +450,12 @@ def run_asset_extraction_stage(tool_context: ToolContext | None = None) -> dict[
     run_dir = _require_state_run_dir(tool_context, "asset_extraction")
     if run_dir is None:
         return _blocked(tool_context, "asset_extraction", "No current_run_dir in workflow state.")
-
-    script_clean_path = run_dir / "01_input" / "script_clean.txt"
-    if not script_clean_path.exists():
-        return _blocked(tool_context, "asset_extraction", f"script_clean.txt missing: {script_clean_path}")
-
-    source_script_name = str(tool_context.state.get("source_script_name", "")) or script_clean_path.stem
-    artifacts = extract_asset_registry_from_text(
-        source_script_name=source_script_name,
-        script_text=script_clean_path.read_text(encoding="utf-8"),
-        model_config=_load_text_config(),
-        output_root=(PROJECT_ROOT / "runs").resolve(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "asset_extraction",
         run_dir=run_dir,
-        source_path=DEFAULT_SOURCE_PATH if DEFAULT_SOURCE_PATH.exists() else None,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
-    tool_context.state["asset_registry_path"] = str((artifacts.asset_dir / "asset_registry.json").resolve())
-    return _completed(tool_context, "asset_extraction", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_storyboard_seed_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -435,14 +465,12 @@ def run_storyboard_seed_stage(tool_context: ToolContext | None = None) -> dict[s
     run_dir = _require_state_run_dir(tool_context, "storyboard_seed")
     if run_dir is None:
         return _blocked(tool_context, "storyboard_seed", "No current_run_dir in workflow state.")
-    script_clean_path = run_dir / "01_input" / "script_clean.txt"
-    if not script_clean_path.exists():
-        return _blocked(tool_context, "storyboard_seed", f"script_clean.txt missing: {script_clean_path}")
-
-    source_script_name = str(tool_context.state.get("source_script_name", "")) or script_clean_path.stem
-    output_path = _build_storyboard_seed(run_dir, source_script_name)
-    tool_context.state["storyboard_seed_path"] = str(output_path.resolve())
-    return _completed(tool_context, "storyboard_seed", run_dir)
+    result = WORKFLOW_SERVICE.run_stage(
+        "storyboard_seed",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
+    )
+    return _apply_service_result(tool_context, result)
 
 
 def run_style_bible_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -452,16 +480,12 @@ def run_style_bible_stage(tool_context: ToolContext | None = None) -> dict[str, 
     run_dir = _require_state_run_dir(tool_context, "style_bible")
     if run_dir is None:
         return _blocked(tool_context, "style_bible", "No current_run_dir in workflow state.")
-    asset_registry_path = run_dir / "02_assets" / "asset_registry.json"
-    if not asset_registry_path.exists():
-        return _blocked(tool_context, "style_bible", f"asset_registry.json missing: {asset_registry_path}")
-
-    artifacts = generate_style_bible(
-        asset_registry_path=asset_registry_path,
-        model_config=_load_text_config(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "style_bible",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
-    tool_context.state["style_bible_path"] = str((artifacts.style_dir / "style_bible.json").resolve())
-    return _completed(tool_context, "style_bible", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_asset_prompt_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -471,16 +495,12 @@ def run_asset_prompt_stage(tool_context: ToolContext | None = None) -> dict[str,
     run_dir = _require_state_run_dir(tool_context, "asset_prompts")
     if run_dir is None:
         return _blocked(tool_context, "asset_prompts", "No current_run_dir in workflow state.")
-    style_bible_path = run_dir / "03_style" / "style_bible.json"
-    if not style_bible_path.exists():
-        return _blocked(tool_context, "asset_prompts", f"style_bible.json missing: {style_bible_path}")
-
-    artifacts = generate_asset_prompts(
-        style_bible_path=style_bible_path,
-        model_config=_load_text_config(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "asset_prompts",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
-    tool_context.state["asset_prompts_path"] = str((artifacts.prompt_dir / "asset_prompts.json").resolve())
-    return _completed(tool_context, "asset_prompts", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_asset_image_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -490,16 +510,12 @@ def run_asset_image_stage(tool_context: ToolContext | None = None) -> dict[str, 
     run_dir = _require_state_run_dir(tool_context, "asset_images")
     if run_dir is None:
         return _blocked(tool_context, "asset_images", "No current_run_dir in workflow state.")
-    asset_prompts_path = run_dir / "04_asset_prompts" / "asset_prompts.json"
-    if not asset_prompts_path.exists():
-        return _blocked(tool_context, "asset_images", f"asset_prompts.json missing: {asset_prompts_path}")
-
-    artifacts = generate_asset_images(
-        asset_prompts_path=asset_prompts_path,
-        model_config=_load_image_config(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "asset_images",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
-    tool_context.state["asset_images_manifest_path"] = str((artifacts.image_dir / "asset_images_manifest.json").resolve())
-    return _completed(tool_context, "asset_images", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_storyboard_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -509,16 +525,12 @@ def run_storyboard_stage(tool_context: ToolContext | None = None) -> dict[str, A
     run_dir = _require_state_run_dir(tool_context, "storyboard")
     if run_dir is None:
         return _blocked(tool_context, "storyboard", "No current_run_dir in workflow state.")
-    style_bible_path = run_dir / "03_style" / "style_bible.json"
-    if not style_bible_path.exists():
-        return _blocked(tool_context, "storyboard", f"style_bible.json missing: {style_bible_path}")
-
-    artifacts = generate_storyboard(
-        style_bible_path=style_bible_path,
-        model_config=_load_text_config(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "storyboard",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
-    tool_context.state["storyboard_path"] = str((artifacts.storyboard_dir / "storyboard.json").resolve())
-    return _completed(tool_context, "storyboard", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_shot_reference_board_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -528,13 +540,12 @@ def run_shot_reference_board_stage(tool_context: ToolContext | None = None) -> d
     run_dir = _require_state_run_dir(tool_context, "shot_reference_boards")
     if run_dir is None:
         return _blocked(tool_context, "shot_reference_boards", "No current_run_dir in workflow state.")
-    storyboard_path = run_dir / "06_storyboard" / "storyboard.json"
-    if not storyboard_path.exists():
-        return _blocked(tool_context, "shot_reference_boards", f"storyboard.json missing: {storyboard_path}")
-
-    artifacts = generate_shot_reference_boards(storyboard_path=storyboard_path)
-    tool_context.state["shot_reference_manifest_path"] = str((artifacts.board_dir / "shot_reference_manifest.json").resolve())
-    return _completed(tool_context, "shot_reference_boards", run_dir)
+    result = WORKFLOW_SERVICE.run_stage(
+        "shot_reference_boards",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
+    )
+    return _apply_service_result(tool_context, result)
 
 
 def run_board_publish_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -544,125 +555,12 @@ def run_board_publish_stage(tool_context: ToolContext | None = None) -> dict[str
     run_dir = _require_state_run_dir(tool_context, "board_publish")
     if run_dir is None:
         return _blocked(tool_context, "board_publish", "No current_run_dir in workflow state.")
-    manifest_path = run_dir / "07_shot_reference_boards" / "shot_reference_manifest.json"
-    if not manifest_path.exists():
-        return _blocked(tool_context, "board_publish", f"shot_reference_manifest.json missing: {manifest_path}")
-
-    tos_env = _load_board_publish_env()
-    if tos_env is not None:
-        manifest = ShotReferenceManifest.model_validate(read_json(manifest_path))
-        client = TosClientV2(
-            ak=tos_env["access_key"],
-            sk=tos_env["secret_key"],
-            endpoint=tos_env["endpoint"],
-            region=tos_env["region"],
-        )
-        boards_payload: list[dict[str, object]] = []
-        published_entries: list[dict[str, str]] = []
-        try:
-            for board in manifest.boards:
-                source_path = Path(board.board_local_path)
-                if not source_path.exists():
-                    return _blocked(tool_context, "board_publish", f"board image missing: {source_path}")
-                object_key = _build_object_key(tos_env["key_prefix"], manifest.source_run, source_path.name)
-                with source_path.open("rb") as file_obj:
-                    client.put_object(
-                        bucket=tos_env["bucket"],
-                        key=object_key,
-                        content=file_obj,
-                        content_type="image/png",
-                        cache_control="public, max-age=31536000, immutable",
-                    )
-                signed_url = client.pre_signed_url(
-                    HttpMethodType.Http_Method_Get,
-                    bucket=tos_env["bucket"],
-                    key=object_key,
-                    expires=max(60, int(tos_env["url_expiry_seconds"])),
-                ).signed_url
-                payload = board.model_dump(mode="json")
-                payload["board_public_url"] = signed_url
-                boards_payload.append(payload)
-                published_entries.append(
-                    {
-                        "shot_id": board.shot_id,
-                        "source_path": str(source_path),
-                        "object_key": object_key,
-                        "signed_url": signed_url,
-                    }
-                )
-        finally:
-            client.close()
-
-        updated_manifest = ShotReferenceManifest.model_validate(
-            {**manifest.model_dump(mode="json"), "boards": boards_payload}
-        )
-        write_json(manifest_path, updated_manifest.model_dump(mode="json"))
-        result_path = run_dir / "07_shot_reference_boards" / "board_publish_tos_result.json"
-        write_json(
-            result_path,
-            {
-                "source_run": manifest.source_run,
-                "source_script_name": manifest.source_script_name,
-                "bucket": tos_env["bucket"],
-                "endpoint": tos_env["endpoint"],
-                "region": tos_env["region"],
-                "key_prefix": tos_env["key_prefix"],
-                "published_boards": published_entries,
-            },
-        )
-        tool_context.state["board_publish_result_path"] = str(result_path.resolve())
-        return _completed(
-            tool_context,
-            "board_publish",
-            run_dir,
-            {
-                "publish_strategy": "tos",
-                "message": "Published shot reference boards through TOS.",
-            },
-        )
-
-    try:
-        jsdelivr_env = _load_jsdelivr_publish_env(PROJECT_ROOT)
-    except Exception as exc:
-        return _blocked(
-            tool_context,
-            "board_publish",
-            "No BOARD_TOS_* envs found, and jsDelivr fallback could not infer a usable GitHub repo configuration. "
-            f"Details: {exc}",
-        )
-
-    public_base_url = f"https://cdn.jsdelivr.net/gh/{jsdelivr_env['repo_slug']}@{jsdelivr_env['ref']}"
-    publish_artifacts = publish_shot_reference_boards(
-        manifest_path=manifest_path,
-        public_base_url=public_base_url,
-        publish_root_dir=Path(jsdelivr_env["publish_root_dir"]),
-        url_prefix=jsdelivr_env["url_prefix"],
-        output_manifest_path=None,
-    )
-    tool_context.state["board_publish_result_path"] = str(publish_artifacts.result_path.resolve())
-
-    updated_manifest = ShotReferenceManifest.model_validate(read_json(manifest_path))
-    sample_url = next((board.board_public_url for board in updated_manifest.boards if board.board_public_url), "")
-    reachable, detail = _check_public_url_reachable(sample_url) if sample_url else (False, "No sample board_public_url found")
-    if not reachable:
-        return _blocked(
-            tool_context,
-            "board_publish",
-            "Published shot boards into the local `static/` tree and wrote jsDelivr URLs into the manifest, "
-            "but the public CDN URL is not reachable yet. Commit and push the generated `static/runs/...` files, "
-            f"then resume the workflow. Sample URL check: {sample_url or 'N/A'} ({detail}).",
-        )
-
-    return _completed(
-        tool_context,
+    result = WORKFLOW_SERVICE.run_stage(
         "board_publish",
-        run_dir,
-        {
-            "publish_strategy": "jsdelivr",
-            "public_base_url": public_base_url,
-            "message": "Published shot reference boards through the GitHub + jsDelivr fallback path.",
-        },
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
+    return _apply_service_result(tool_context, result)
 
 
 def run_video_job_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -672,16 +570,12 @@ def run_video_job_stage(tool_context: ToolContext | None = None) -> dict[str, An
     run_dir = _require_state_run_dir(tool_context, "video_jobs")
     if run_dir is None:
         return _blocked(tool_context, "video_jobs", "No current_run_dir in workflow state.")
-    storyboard_path = run_dir / "06_storyboard" / "storyboard.json"
-    if not storyboard_path.exists():
-        return _blocked(tool_context, "video_jobs", f"storyboard.json missing: {storyboard_path}")
-
-    artifacts = generate_video_jobs(
-        storyboard_path=storyboard_path,
-        model_config=_load_video_config(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "video_jobs",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
     )
-    tool_context.state["video_jobs_path"] = str((artifacts.jobs_dir / "video_jobs.json").resolve())
-    return _completed(tool_context, "video_jobs", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_shot_video_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -691,21 +585,17 @@ def run_shot_video_stage(tool_context: ToolContext | None = None) -> dict[str, A
     run_dir = _require_state_run_dir(tool_context, "shot_videos")
     if run_dir is None:
         return _blocked(tool_context, "shot_videos", "No current_run_dir in workflow state.")
-    video_jobs_path = run_dir / "08_video_jobs" / "video_jobs.json"
-    if not video_jobs_path.exists():
-        return _blocked(tool_context, "shot_videos", f"video_jobs.json missing: {video_jobs_path}")
-
-    artifacts = generate_shot_videos(
-        video_jobs_path=video_jobs_path,
-        model_config=_load_video_config(),
+    result = WORKFLOW_SERVICE.run_stage(
+        "shot_videos",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
         selected_shots=set(),
         resolution="720p",
         timeout_seconds=1800,
         poll_interval_seconds=10,
         keep_remote_media=False,
     )
-    tool_context.state["shot_videos_manifest_path"] = str((artifacts.output_dir / "shot_videos_manifest.json").resolve())
-    return _completed(tool_context, "shot_videos", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_final_video_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -715,17 +605,14 @@ def run_final_video_stage(tool_context: ToolContext | None = None) -> dict[str, 
     run_dir = _require_state_run_dir(tool_context, "final_video")
     if run_dir is None:
         return _blocked(tool_context, "final_video", "No current_run_dir in workflow state.")
-    shot_videos_manifest_path = run_dir / "09_shot_videos" / "shot_videos_manifest.json"
-    if not shot_videos_manifest_path.exists():
-        return _blocked(tool_context, "final_video", f"shot_videos_manifest.json missing: {shot_videos_manifest_path}")
-
-    artifacts = generate_final_video(
-        shot_videos_manifest_path=shot_videos_manifest_path,
+    result = WORKFLOW_SERVICE.run_stage(
+        "final_video",
+        run_dir=run_dir,
+        source_script_name=str(tool_context.state.get("source_script_name", "")),
         trim_leading_seconds=DEFAULT_TRIM_LEADING_SECONDS,
         blackout_leading_seconds=DEFAULT_BLACKOUT_LEADING_SECONDS,
     )
-    tool_context.state["final_video_path"] = str(artifacts.final_video_path)
-    return _completed(tool_context, "final_video", run_dir)
+    return _apply_service_result(tool_context, result)
 
 
 def run_mainline_workflow(
@@ -739,86 +626,31 @@ def run_mainline_workflow(
     """Run the project's mainline workflow end to end inside VeADK web."""
 
     assert tool_context is not None
-
-    start_result = start_or_resume_workflow(
+    result = WORKFLOW_SERVICE.run_mainline(
         source_text=source_text,
         source_path=source_path,
         source_script_name=source_script_name,
         input_mode=input_mode,
         run_dir=run_dir,
-        tool_context=tool_context,
+        include_storyboard_seed=False,
+        parallel_planning=True,
     )
-    if start_result.get("status") != "ok":
-        return start_result
-
-    current_run_dir = _resolve_run_dir(tool_context)
-    if current_run_dir is None:
-        return _blocked(tool_context, "run_mainline_workflow", "Workflow state lost current_run_dir after startup.")
-
-    script_clean_path = current_run_dir / "01_input" / "script_clean.txt"
-    if not script_clean_path.exists():
-        return _blocked(
-            tool_context,
-            "run_mainline_workflow",
-            "Upstream routing did not produce script_clean.txt. Check whether the router stopped for confirmation.",
-        )
-
-    effective_source_script_name = str(tool_context.state.get("source_script_name", "")) or script_clean_path.stem
-
-    try:
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            asset_future = executor.submit(
-                extract_asset_registry_from_text,
-                source_script_name=effective_source_script_name,
-                script_text=script_clean_path.read_text(encoding="utf-8"),
-                model_config=_load_text_config(),
-                output_root=(PROJECT_ROOT / "runs").resolve(),
-                run_dir=current_run_dir,
-                source_path=DEFAULT_SOURCE_PATH if DEFAULT_SOURCE_PATH.exists() else None,
-            )
-            storyboard_seed_future = executor.submit(
-                _build_storyboard_seed,
-                current_run_dir,
-                effective_source_script_name,
-            )
-
-            asset_artifacts = asset_future.result()
-            storyboard_seed_path = storyboard_seed_future.result()
-
-        tool_context.state["asset_registry_path"] = str((asset_artifacts.asset_dir / "asset_registry.json").resolve())
-        tool_context.state["storyboard_seed_path"] = str(storyboard_seed_path.resolve())
-        _set_stage(tool_context, "parallel_planning_done")
-    except Exception as exc:
-        return _blocked(tool_context, "parallel_planning", str(exc))
-
-    for stage_func in (
-        run_style_bible_stage,
-        run_asset_prompt_stage,
-        run_asset_image_stage,
-        run_storyboard_stage,
-        run_shot_reference_board_stage,
-        run_board_publish_stage,
-        run_video_job_stage,
-        run_shot_video_stage,
-        run_final_video_stage,
-    ):
-        result = stage_func(tool_context=tool_context)
-        if result.get("status") != "ok":
-            return {
-                "status": "partial",
-                "completed_through": tool_context.state.get("current_stage", ""),
-                "last_result": result,
-                "run_dir": str(current_run_dir),
-                "artifacts": _artifact_snapshot(current_run_dir),
-            }
-
-    return {
-        "status": "ok",
-        "stage": "mainline_workflow_completed",
-        "run_dir": str(current_run_dir),
-        "artifacts": _artifact_snapshot(current_run_dir),
-        "workflow_history": list(tool_context.state.get("workflow_history", [])),
-    }
+    applied = _apply_service_result(tool_context, result)
+    run_state = applied.get("run_state")
+    if isinstance(run_state, dict):
+        stage_order = list(run_state.get("stage_order", []))
+        stages = run_state.get("stages", {})
+        if isinstance(stages, dict):
+            history = [
+                stage_name
+                for stage_name in stage_order
+                if isinstance(stages.get(stage_name), dict)
+                and str(stages[stage_name].get("status", "")).strip() == "succeeded"
+            ]
+            if isinstance(stages.get("storyboard_seed"), dict) and str(stages["storyboard_seed"].get("status", "")).strip() == "succeeded":
+                history.append("storyboard_seed")
+            tool_context.state["workflow_history"] = history
+    return applied
 
 
 def inspect_current_run(tool_context: ToolContext | None = None) -> dict[str, Any]:
@@ -828,10 +660,7 @@ def inspect_current_run(tool_context: ToolContext | None = None) -> dict[str, An
     run_dir = _resolve_run_dir(tool_context)
     if run_dir is None:
         return {"status": "idle", "message": "No workflow run has been started in this session yet."}
-    return {
-        "status": "ok",
-        "current_stage": tool_context.state.get("current_stage", ""),
-        "workflow_history": list(tool_context.state.get("workflow_history", [])),
-        "run_dir": str(run_dir),
-        "artifacts": _artifact_snapshot(run_dir),
-    }
+    result = WORKFLOW_SERVICE.inspect_run(run_dir)
+    result["current_stage"] = tool_context.state.get("current_stage", "")
+    result["workflow_history"] = list(tool_context.state.get("workflow_history", []))
+    return result

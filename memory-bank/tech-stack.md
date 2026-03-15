@@ -5,6 +5,11 @@
 - Python 3.12
 - AgentKit
 - VeADK
+- Shared workflow orchestration under `app/workflow_service.py`
+- Persisted run-state under `app/run_state.py`
+- Persisted operator review state under `app/review_state.py`
+- Current operator console stack: FastAPI + uvicorn + custom HTML shell
+- Planned next-step UI layer: NiceGUI
 
 ## Model Provider
 
@@ -23,6 +28,7 @@
 ## Planned Supporting Libraries
 
 - Standard library: `json`, `pathlib`, `dataclasses` or `pydantic`, `logging`, `subprocess`
+- Operator console: `fastapi`, `uvicorn`, `nicegui`
 - Image processing: likely `Pillow`
 - Video stitching: likely `ffmpeg`
 - Schema validation: likely `pydantic`

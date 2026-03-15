@@ -13,6 +13,7 @@ import httpx
 from tos import TosClientV2
 from tos.enum import HttpMethodType
 
+from app.workflow_service import WorkflowService
 from pipeline.asset_extraction import extract_asset_registry_from_text
 from pipeline.asset_images import generate_asset_images
 from pipeline.asset_prompts import generate_asset_prompts
@@ -302,6 +303,54 @@ def ensure_script_clean_exists(run_dir: Path) -> Path:
     raise WorkflowBlockedError("upstream", reason)
 
 
+def recover_upstream_for_existing_run(
+    *,
+    run_dir: Path,
+    text_config,
+    output_root: Path,
+    input_mode: str,
+) -> str:
+    script_clean_path = run_dir / "01_input" / "script_clean.txt"
+    if script_clean_path.exists():
+        return load_source_script_name(run_dir)
+
+    source_input_path = run_dir / "00_source" / "source_input.txt"
+    source_context_path = run_dir / "00_source" / "source_context.json"
+    if not source_input_path.exists():
+        raise WorkflowBlockedError(
+            "upstream",
+            f"Cannot resume {run_dir}: missing both 01_input/script_clean.txt and 00_source/source_input.txt",
+        )
+
+    source_text = source_input_path.read_text(encoding="utf-8")
+    source_script_name = run_dir.name
+    recovery_input_mode = input_mode
+    source_path: Path | None = None
+    if source_context_path.exists():
+        payload = read_json(source_context_path)
+        if isinstance(payload, dict):
+            source_script_name = str(payload.get("source_script_name", "")).strip() or source_script_name
+            if recovery_input_mode == AUTO_INPUT_MODE:
+                recovery_input_mode = str(payload.get("requested_input_mode", "")).strip() or recovery_input_mode
+            raw_source_path = str(payload.get("source_path", "")).strip()
+            if raw_source_path:
+                candidate = Path(raw_source_path).resolve()
+                if candidate.exists():
+                    source_path = candidate
+
+    generate_script_from_intent(
+        source_text=source_text,
+        source_script_name=source_script_name,
+        model_config=text_config,
+        output_root=output_root,
+        run_dir=run_dir,
+        source_path=source_path,
+        input_mode=recovery_input_mode,
+        extract_assets=False,
+    )
+    return source_script_name
+
+
 def has_reachable_board_urls(manifest_path: Path) -> tuple[bool, str]:
     manifest = ShotReferenceManifest.model_validate(read_json(manifest_path))
     sample_url = first_nonempty(board.board_public_url for board in manifest.boards)
@@ -408,151 +457,81 @@ def publish_boards_auto(manifest_path: Path, publish_strategy: str, target_repo_
 
 def main() -> int:
     args = parse_args()
-    load_env_file(Path(args.env_file).resolve())
+    service = WorkflowService(
+        config_path=Path(args.config).resolve(),
+        output_root=Path(args.output_root).resolve(),
+        target_repo_root=Path(args.target_repo_root).resolve() if args.target_repo_root else PROJECT_ROOT.resolve(),
+        env_file=Path(args.env_file).resolve(),
+    )
 
-    config_path = Path(args.config).resolve()
-    output_root = Path(args.output_root).resolve()
-    target_repo_root = Path(args.target_repo_root).resolve() if args.target_repo_root else PROJECT_ROOT.resolve()
+    start_result = service.start_or_resume(
+        source_text=args.text or "",
+        source_path=args.input or "",
+        source_script_name=args.source_name.strip(),
+        input_mode=args.input_mode,
+        run_dir=args.run_dir or "",
+    )
+    start_status = str(start_result.get("status", ""))
+    if start_status != "ok":
+        message = str(start_result.get("reason") or start_result.get("message") or "unknown workflow error")
+        prefix = "blocked" if start_status == "blocked" else "failed"
+        print(f"[{prefix}] upstream: {message}", file=sys.stderr)
+        return 2 if start_status == "blocked" else 1
 
-    text_config = load_text_model_config(config_path)
-    image_config = load_image_model_config(config_path)
-    video_config = load_video_model_config(config_path)
-
+    run_dir = Path(str(start_result["run_dir"])).resolve()
+    source_script_name = str(start_result.get("source_script_name", "")).strip() or service.load_source_script_name(run_dir)
     if args.run_dir:
-        run_dir = Path(args.run_dir).resolve()
-        if not run_dir.exists():
-            raise FileNotFoundError(f"Run directory not found: {run_dir}")
         print(f"[resume] {run_dir}")
-    else:
-        source_path = Path(args.input).resolve() if args.input else None
-        source_text = args.text if args.text is not None else source_path.read_text(encoding="utf-8")
-        source_name = args.source_name.strip() or (source_path.stem if source_path is not None else "intent_input")
-        upstream_artifacts = generate_script_from_intent(
-            source_text=source_text,
-            source_script_name=source_name,
-            model_config=text_config,
-            output_root=output_root,
-            run_dir=None,
-            source_path=source_path,
-            input_mode=args.input_mode,
-            extract_assets=False,
-        )
-        run_dir = upstream_artifacts.run_dir.resolve()
-        print(f"[ok] upstream -> {run_dir}")
-        ensure_stop("upstream", args.stop_after, run_dir)
+    print(f"[ok] upstream -> {run_dir}")
+    ensure_stop("upstream", args.stop_after, run_dir)
 
-    source_script_name = load_source_script_name(run_dir)
-    script_clean_path = ensure_script_clean_exists(run_dir)
+    artifact_keys = {
+        "asset_extraction": "asset_registry_path",
+        "style_bible": "style_bible_path",
+        "asset_prompts": "asset_prompts_path",
+        "asset_images": "asset_images_manifest_path",
+        "storyboard": "storyboard_path",
+        "shot_reference_boards": "shot_reference_manifest_path",
+        "board_publish": "board_publish_result_path",
+        "video_jobs": "video_jobs_path",
+        "shot_videos": "shot_videos_manifest_path",
+        "final_video": "final_video_path",
+    }
 
-    asset_registry_path = run_dir / "02_assets" / "asset_registry.json"
-    if not asset_registry_path.exists():
-        extract_asset_registry_from_text(
-            source_script_name=source_script_name,
-            script_text=script_clean_path.read_text(encoding="utf-8"),
-            model_config=text_config,
-            output_root=output_root,
+    selected_shots = set(filter(None, (part.strip() for part in args.shots.split(","))))
+    for stage in STAGE_ORDER[1:]:
+        result = service.run_stage(
+            stage,  # type: ignore[arg-type]
             run_dir=run_dir,
-            source_path=None,
-        )
-        print(f"[ok] asset_extraction -> {asset_registry_path}")
-    else:
-        print(f"[skip] asset_extraction -> {asset_registry_path}")
-    ensure_stop("asset_extraction", args.stop_after, run_dir)
-
-    style_bible_path = run_dir / "03_style" / "style_bible.json"
-    if not style_bible_path.exists():
-        generate_style_bible(asset_registry_path=asset_registry_path, model_config=text_config)
-        print(f"[ok] style_bible -> {style_bible_path}")
-    else:
-        print(f"[skip] style_bible -> {style_bible_path}")
-    ensure_stop("style_bible", args.stop_after, run_dir)
-
-    asset_prompts_path = run_dir / "04_asset_prompts" / "asset_prompts.json"
-    if not asset_prompts_path.exists():
-        generate_asset_prompts(style_bible_path=style_bible_path, model_config=text_config)
-        print(f"[ok] asset_prompts -> {asset_prompts_path}")
-    else:
-        print(f"[skip] asset_prompts -> {asset_prompts_path}")
-    ensure_stop("asset_prompts", args.stop_after, run_dir)
-
-    asset_images_manifest_path = run_dir / "05_asset_images" / "asset_images_manifest.json"
-    if not asset_images_manifest_path.exists():
-        generate_asset_images(asset_prompts_path=asset_prompts_path, model_config=image_config)
-        print(f"[ok] asset_images -> {asset_images_manifest_path}")
-    else:
-        print(f"[skip] asset_images -> {asset_images_manifest_path}")
-    ensure_stop("asset_images", args.stop_after, run_dir)
-
-    storyboard_path = run_dir / "06_storyboard" / "storyboard.json"
-    if not storyboard_path.exists():
-        generate_storyboard(style_bible_path=style_bible_path, model_config=text_config)
-        print(f"[ok] storyboard -> {storyboard_path}")
-    else:
-        print(f"[skip] storyboard -> {storyboard_path}")
-    ensure_stop("storyboard", args.stop_after, run_dir)
-
-    shot_reference_manifest_path = run_dir / "07_shot_reference_boards" / "shot_reference_manifest.json"
-    if not shot_reference_manifest_path.exists():
-        generate_shot_reference_boards(storyboard_path=storyboard_path)
-        print(f"[ok] shot_reference_boards -> {shot_reference_manifest_path}")
-    else:
-        print(f"[skip] shot_reference_boards -> {shot_reference_manifest_path}")
-    ensure_stop("shot_reference_boards", args.stop_after, run_dir)
-
-    reachable, detail = has_reachable_board_urls(shot_reference_manifest_path)
-    if reachable:
-        print(f"[skip] board_publish -> existing public board URLs are reachable ({detail})")
-    else:
-        publish_strategy, result_path = publish_boards_auto(
-            shot_reference_manifest_path,
+            source_script_name=source_script_name,
             publish_strategy=args.publish_strategy,
-            target_repo_root=target_repo_root,
-        )
-        print(f"[ok] board_publish ({publish_strategy}) -> {result_path}")
-    ensure_stop("board_publish", args.stop_after, run_dir)
-
-    video_jobs_path = run_dir / "08_video_jobs" / "video_jobs.json"
-    if not video_jobs_path.exists():
-        generate_video_jobs(storyboard_path=storyboard_path, model_config=video_config)
-        print(f"[ok] video_jobs -> {video_jobs_path}")
-    else:
-        print(f"[skip] video_jobs -> {video_jobs_path}")
-    ensure_stop("video_jobs", args.stop_after, run_dir)
-
-    shot_videos_manifest_path = run_dir / "09_shot_videos" / "shot_videos_manifest.json"
-    if not shot_videos_manifest_path.exists():
-        generate_shot_videos(
-            video_jobs_path=video_jobs_path,
-            model_config=video_config,
-            selected_shots=set(filter(None, (part.strip() for part in args.shots.split(",")))),
+            selected_shots=selected_shots,
             resolution=args.resolution,
             timeout_seconds=args.timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
             keep_remote_media=args.keep_remote_media,
-        )
-        print(f"[ok] shot_videos -> {shot_videos_manifest_path}")
-    else:
-        print(f"[skip] shot_videos -> {shot_videos_manifest_path}")
-    ensure_stop("shot_videos", args.stop_after, run_dir)
-
-    final_video_path = run_dir / "10_final" / "final_video.mp4"
-    if not final_video_path.exists():
-        generate_final_video(
-            shot_videos_manifest_path=shot_videos_manifest_path,
             trim_leading_seconds=args.trim_leading_seconds,
             blackout_leading_seconds=args.blackout_leading_seconds,
         )
-        print(f"[ok] final_video -> {final_video_path}")
-    else:
-        print(f"[skip] final_video -> {final_video_path}")
+        status = str(result.get("status", ""))
+        if status != "ok":
+            message = str(result.get("reason") or result.get("message") or "unknown workflow error")
+            prefix = "blocked" if status == "blocked" else "failed"
+            print(f"[{prefix}] {stage}: {message}", file=sys.stderr)
+            return 2 if status == "blocked" else 1
+
+        artifact_path = str(result.get("artifacts", {}).get(artifact_keys[stage], "")).strip()
+        message = str(result.get("message", "")).strip()
+        log_prefix = "[skip]" if message.startswith("Reused existing") or message.startswith("Reused existing public") else "[ok]"
+        if artifact_path:
+            print(f"{log_prefix} {stage} -> {artifact_path}")
+        else:
+            print(f"{log_prefix} {stage} -> {message or 'completed'}")
+        ensure_stop(stage, args.stop_after, run_dir)
 
     print(f"[done] workflow completed for {run_dir}")
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except WorkflowBlockedError as exc:
-        print(f"[blocked] {exc.stage}: {exc.message}", file=sys.stderr)
-        raise SystemExit(2)
+    raise SystemExit(main())

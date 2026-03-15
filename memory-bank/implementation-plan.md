@@ -42,6 +42,13 @@ Validation:
   - a usable generated script under the same run directory
   - or an explicit confirmation stop at the router stage
 
+Current state:
+
+- Router normalization now canonicalizes `recommended_operations` so model drift in operation ordering does not crash the run before upstream generation continues.
+- The current upstream repair contract supports both:
+  - `compress + rewrite_for_asset_clarity`
+  - `rewrite_for_asset_clarity + compress`
+
 ## Step 1: Asset Schema and Asset Extraction Prompt
 
 Status: done
@@ -157,6 +164,8 @@ Current state:
 
 - `storyboard.json` generation is implemented and verified.
 - The node now validates shot sequencing, fixed 10-second duration, contiguous segment coverage, and asset-reference integrity against `asset_registry.json`.
+- Shot prop validation now accepts covered-segment props plus character signature props plus covered/primary-scene default props.
+- The prompt digest now exposes `signature_prop_ids` and `default_prop_ids` so persistent props can be carried consistently.
 - `runs/run10/06_storyboard/storyboard.json` is the current verified storyboard baseline.
 
 ## Step 6: Shot Reference Board Generation
@@ -267,3 +276,36 @@ Current state:
 - `runs/run10/10_final/final_video.mp4` is the current final-video baseline.
 - The concat stage now trims the start of every shot video before stitching so the stitched reference board does not remain visible in the final combined video.
 - The concat stage also supports a short leading black-screen cover on every processed shot to hide any residual board frames that survive the trim window.
+
+## Step 10: Shared Workflow Service and Operator Console Foundation
+
+Status: in progress
+
+Goal:
+
+- Extract a shared orchestration service so CLI, VeADK, and the upcoming custom UI do not own separate workflow logic.
+- Persist workflow run state in a UI-ready format.
+- Establish the first stable contract for future approval checkpoints and stage reruns.
+
+Outputs:
+
+- `app/workflow_service.py`
+- `app/run_state.py`
+- `runs/runN/_meta/run_state.json`
+- `runs/runN/_meta/events.jsonl`
+
+Validation:
+
+- `run_workflow.py` and `ai_studio_flow/workflow_tools.py` both call the shared workflow service.
+- A resumed existing run writes `_meta/run_state.json` and `_meta/events.jsonl`.
+- The shared service can report artifact snapshots and per-stage status without changing the stage implementation modules under `pipeline/`.
+
+Current state:
+
+- The shared workflow service is implemented.
+- The first persisted run-state model is implemented.
+- CLI and VeADK now call the shared service.
+- The first operator-console API layer is implemented.
+- The first local operator-console page shell is implemented.
+- The first persisted review model for `upstream`, `asset_images`, and `storyboard` is implemented.
+- Operator approvals now hard-block downstream execution at `upstream`, `asset_images`, and `storyboard` until the stored review state is approved.

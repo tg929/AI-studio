@@ -1,7 +1,9 @@
 veadk-python
 agentkit-sdk-python
+fastapi
 pydantic
 PyYAML
 httpx
 Pillow
 tos
+uvicorn

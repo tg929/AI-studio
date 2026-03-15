@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-03-15
+Last updated: 2026-03-16
 
 ## Completed
 
@@ -150,6 +150,23 @@ Last updated: 2026-03-15
   - dry-run artifact generation under `/private/tmp/intent-router-smoke`
   - confirmed `source_context.json` now records `fallback_input_mode` and `project_target`
   - confirmed `intake_router_request.json` is now the first-stage request payload
+- Hardened upstream router normalization for model drift:
+  - `recommended_operations` is now canonicalized to match `chosen_path`
+  - the current repair path supports `rewrite_for_asset_clarity + compress` without failing Pydantic validation
+  - the `02-斗气大陆.txt` intake-router failure shape now validates cleanly from the saved response artifact
+- Relaxed storyboard cross-file prop validation to match asset semantics:
+  - shot `prop_ids` may now come from covered `story_segments`
+  - or from a listed character's `signature_prop_ids`
+  - or from the covered / primary scene's `default_prop_ids`
+- Added local regression tests for the two recent workflow failures:
+  - `run17` intake-router path/operation mismatch
+  - `run16` storyboard signature-prop validation failure
+- Rebuilt `runs/run16/06_storyboard/storyboard.json` from the saved model response after the validator fix.
+- Verified `run16` now resumes past storyboard and successfully generates `07_shot_reference_boards/shot_reference_manifest.json`.
+- Published `static/runs/run16/07_shot_reference_boards/boards/*.png` to `origin/main` so jsDelivr now returns `HTTP 200` for `run16` board URLs.
+- Approved the `run16` checkpoint reviews (`upstream`, `asset_images`, `storyboard`) to unblock CLI resume through the new operator-review gates.
+- Verified `run16` now resumes past `board_publish`, regenerates `08_video_jobs/video_jobs.json`, and enters real `09_shot_videos` execution.
+- Confirmed `runs/run16/09_shot_videos/videos/shot_001.mp4` was generated successfully and `shot_002` submission started.
 - The first real `run11` script-quality result passed all hard checks:
   - `passes_hard_checks = true`
   - `repair_needed = false`
@@ -168,7 +185,7 @@ Last updated: 2026-03-15
 
 ## Current Phase
 
-Workflow completion, VeADK web wrapping, upstream routing hardening, extraction robustness, and interview-alignment cleanup.
+Workflow completion, shared orchestration extraction, custom operator-console preparation, upstream routing hardening, extraction robustness, and regression-proofing for failed local runs.
 
 The project now has:
 
@@ -189,21 +206,28 @@ The project now has:
 - one working Python intake-router upstream node
 - one working Python asset-readiness gate for upstream script candidates
 - one working VeADK web workflow package under `ai_studio_flow/`
+- one shared workflow service under `app/workflow_service.py`
+- one persisted run-state layer under `app/run_state.py`
+- one operator-console API layer under `app/api.py`
+- one background task runner under `app/task_runner.py`
+- one persisted review layer under `app/review_state.py`
+- one first local operator-console UI shell under `app/ui.py`
 - one working fresh end-to-end intent-to-video sample under `runs/run13`
 - project memory-bank setup
 
 ## Next Step
 
 - Decide whether the first repair pass after `asset_readiness_report.json` should be automatic or confirmation-gated.
-- Add a unified user-facing entrypoint that supports `script|storyboard` output selection.
-- Run the first real `veadk web` session against `ai_studio_flow` and validate operator prompts plus tool behavior.
-- Prepare an interview-facing README / demo flow / talk track around `run13`.
+- Replace the current HTML-shell implementation with NiceGUI components once the local environment is ready for that dependency.
+- Add richer media review features: larger asset-image inspection, storyboard diffing, and shot-video monitoring panels.
+- Prepare an interview-facing README / demo flow / talk track around `run13` and the new UI direction.
 
 ## Known Constraints
 
 - Python only for implementation
 - AgentKit / VeADK is the target runtime
-- `veadk web` is now the preferred interactive shell over a custom frontend for the current phase
+- The shared workflow service is now the primary orchestration surface
+- `veadk web` remains available, but it is no longer the preferred long-term interactive shell
 - Asset images are labeled
 - One stitched board image per shot is sent to the video model
 - Each shot is 10 seconds
@@ -283,6 +307,35 @@ The project now has:
   - supports resume via `--run-dir`
   - skips completed stages automatically
   - mirrors the current publish behavior: TOS first, then GitHub + jsDelivr fallback
+- Fixed the VeADK web `run16` story-blueprint failure mode in `pipeline/intent_to_script.py`:
+  - some model outputs returned only 2 `scene_plan.visual_anchors`, while the schema requires at least 3
+  - blueprint normalization now backfills missing scene anchors from scene-specific beat anchors plus conservative local fallbacks before schema validation
+- Locked the custom operator-console direction and added the first shared orchestration foundation:
+  - added `app/workflow_service.py` as the shared service for CLI, VeADK, and the upcoming UI
+  - added `app/run_state.py` with persisted `runs/runN/_meta/run_state.json` and `events.jsonl`
+  - refactored `run_workflow.py` and `ai_studio_flow/workflow_tools.py` to call the shared service instead of owning separate orchestration paths
+  - verified the refactor with `.venv/bin/python` imports, `python3 -m compileall app ai_studio_flow run_workflow.py`, and a CLI resume smoke run on `runs/run14`
+- Added the first operator-console runtime layer on top of the shared service:
+  - added `app/task_runner.py` for background workflow tasks
+  - added `app/api.py` for run, task, artifact, event, and review APIs
+  - added `app/review_state.py` for persisted `upstream`, `asset_images`, and `storyboard` reviews
+  - added `app/ui.py` plus `run_operator_console.py` for the first local operator-console page shell
+  - verified local startup and HTTP behavior through `http://127.0.0.1:8188`
+  - verified background `continue` execution through the task API on `runs/run14`
+- Activated the first real operator approval gates in the shared workflow service:
+  - downstream execution now stops at `upstream`, `asset_images`, and `storyboard` until the stored review state is approved
+  - `app/task_runner.py` now exposes `awaiting_approval` as a task outcome
+  - `app/ui.py` now surfaces the current `awaiting_approval_stage` in the run header
+  - verified the new gate behavior with `.venv/bin/python -m unittest tests.test_regression_failures.WorkflowReviewGateTests`
+- Upgraded the first operator review UI from a plain artifact dump into a more usable review console:
+  - `asset_images` review now supports type filters, text search, in-console image inspection, and denser asset cards
+  - `storyboard` review now supports shot-by-shot navigation, richer shot metadata, reference-asset thumbnails, and board preview when available
+  - `app/workflow_service.py` now enriches storyboard review payloads with asset-image and shot-board lookups
+  - verified the UI shell with FastAPI `TestClient`, `node --check` on the extracted page script, and `.venv/bin/python -m unittest tests.test_regression_failures.WorkflowReviewPayloadTests`
+- Hardened intake-router drift handling for console-triggered upstream runs:
+  - `pipeline/intent_to_script.py` now clears stale `needs_confirmation=true` flags when the model already chose a concrete non-confirm path
+  - confirm-path outputs now backfill `confirmation_points` from available missing-info/risk fields when the model omits them
+  - `app/api.py` now maps sync create-run validation failures to readable `422` responses instead of opaque server errors
 - Reworked shot-board composition so asset completeness now takes priority over forced cell fill:
   - `grid_1x1`, `grid_2x1`, `grid_2x2`, and `grid_3x2` now use adaptive row layouts
   - all shot-board assets are rendered with full-image containment instead of default `cover` cropping

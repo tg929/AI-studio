@@ -2,7 +2,7 @@
 
 ## Summary
 
-This project builds a script-to-video workflow using Volcano Engine models through a Python AgentKit and VeADK application.
+This project builds a script-to-video workflow using Volcano Engine models through a Python pipeline with AgentKit and VeADK integrations.
 
 The system currently supports two upstream intake families:
 
@@ -28,8 +28,13 @@ Current baseline:
 - `run10` is the first end-to-end completed baseline run from script through final stitched video.
 - The current final output is `runs/run10/10_final/final_video.mp4`.
 - Final stitching now supports both leading trim and a short leading black-screen cover on every shot so residual first-frame board frames can be hidden deterministically.
-- The current interactive runtime direction is `veadk web`, using a dedicated `ai_studio_flow` agent package instead of building a custom UI first.
+- The interactive direction is now shifting from `veadk web`-first operation to a custom Python operator console.
+- A shared workflow service plus persisted run-state layer now sits underneath the CLI and VeADK tools as the foundation for that UI.
+- The first local operator-console skeleton now exists with FastAPI endpoints, background task execution, and review-oriented run detail panels.
+- The first operator approval gates are now active: downstream execution stops at `upstream`, `asset_images`, and `storyboard` until the stored review state is approved.
 - The project now also has a unified local CLI entrypoint `run_workflow.py` for terminal-based end-to-end execution and resume.
+- Upstream intake-router normalization now repairs path / operation-order mismatches before schema validation.
+- Storyboard prop coverage now treats character signature props and scene default props as valid carry-over assets.
 
 ## Default Input
 
@@ -56,14 +61,17 @@ Current baseline:
 
 - Python implementation
 - AgentKit / VeADK workflow
-- `veadk web` is the primary user-facing shell for the current interview/demo version
+- The next user-facing shell is a custom Python operator console built on a shared orchestration service
+- `veadk web` remains a secondary operator/debug shell during the transition
 - Volcano Engine text, image, and video models
 - The current short-intent expansion target is a roughly `60s`, `6-shot` micro-script before it enters the existing downstream flow
 - The upstream router should choose the minimum necessary path among `expand|compress|rewrite|direct_extract|confirm`
+- `recommended_operations` must be canonicalized so its first item matches the chosen upstream path
 - Shot duration fixed at 10 seconds
 - Asset images must include labels
 - Video model gets one stitched board image plus one shot prompt
 - Asset extraction should only run after an explicit readiness check on the current script candidate
+- Storyboard shot props may come from covered segments, listed-character signature props, or covered/primary-scene default props
 - Final video stitching trims the leading first-frame display window from each shot before concatenation
 - Final video stitching can also force a short leading black-screen cover on each processed shot before concatenation
 - JSON as the default inter-stage contract
@@ -78,7 +86,7 @@ Current baseline:
 
 ## Not in V1
 
-- Custom advanced UI
-- Fine-grained human review tooling
+- Public-facing polished product UI
+- Fine-grained human review tooling beyond the first operator approval checkpoints
 - Automatic dubbing/music/subtitles
 - Multi-project orchestration

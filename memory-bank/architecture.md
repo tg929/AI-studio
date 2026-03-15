@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-15
+Last updated: 2026-03-16
 
 ## Current Files
 
@@ -20,24 +20,84 @@ Future role:
 
 Current role:
 
-- Primary VeADK web entrypoint for the current project
+- Secondary VeADK web entrypoint for the current project
 - Exposes `root_agent`
 - Mounts the full workflow operator tools inside `veadk web`
-- Instructs the agent to prefer the end-to-end mainline tool for normal user requests
+- Now sits on top of the shared workflow service instead of owning the full orchestration logic directly
 
 ### `ai_studio_flow/workflow_tools.py`
 
 Current role:
 
-- Wraps the existing pipeline modules as VeADK-callable tools
+- Wraps the shared workflow service as VeADK-callable tools
 - Maintains session workflow state such as `current_run_dir`
-- Starts or resumes runs from user input
-- Implements the current mainline workflow orchestration
-- Runs asset extraction and storyboard-seed planning in parallel
-- Continues through style, asset prompts, asset images, storyboard, boards, publish, video jobs, shot videos, and final concat
-- Publishes stitched boards through TOS when `BOARD_TOS_*` envs are configured
-- Falls back to the existing GitHub + jsDelivr publish path when TOS envs are absent
-- Verifies jsDelivr reachability and blocks with a commit/push requirement when the copied `static/runs/...` files are not public yet
+- Delegates start/resume, per-stage execution, and mainline execution into `app/workflow_service.py`
+- Mirrors service results back into VeADK `ToolContext.state` for conversational continuity
+
+### `app/workflow_service.py`
+
+Current role:
+
+- Shared orchestration layer for CLI, VeADK, and the upcoming custom operator UI
+- Owns start-or-resume behavior for new input or existing `runN`
+- Owns per-stage execution, mainline execution, artifact snapshotting, and board-publish strategy selection
+- Persists stage outcomes through the run-state helpers
+- Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
+- Keeps the existing pipeline modules as the stage implementation boundary
+
+### `app/run_state.py`
+
+Current role:
+
+- Persists per-run workflow state under `runs/runN/_meta/`
+- Defines the stage and run status model for the upcoming operator UI
+- Writes `run_state.json`
+- Appends `events.jsonl`
+- Establishes the first stable contract for approval-ready, restartable workflow runs
+
+### `app/review_state.py`
+
+Current role:
+
+- Persists operator review state under `runs/runN/_meta/reviews.json`
+- Tracks review status for `upstream`, `asset_images`, and `storyboard`
+- Stores reviewer notes and light metadata for the first approval workflow
+- Provides the persisted gate state that downstream execution now checks before continuing past each approval checkpoint
+
+### `app/task_runner.py`
+
+Current role:
+
+- Runs workflow actions in background threads for the operator console
+- Tracks transient task status for launch, continue, and rerun-stage actions
+- Exposes `awaiting_approval` as a first-class background-task outcome when a run stops at an operator checkpoint
+- Bridges the synchronous workflow service into API-friendly task behavior
+
+### `app/api.py`
+
+Current role:
+
+- Exposes the first operator-console HTTP API
+- Provides run listing, run detail, artifact listing, event listing, task listing, continue, rerun-stage, and review endpoints
+- Serves local run artifacts through a bounded `/media/{run_id}/...` route
+- Converts synchronous create-run validation failures into readable API responses for the console
+
+### `app/ui.py`
+
+Current role:
+
+- Serves the first operator-console HTML shell on top of the FastAPI app
+- Renders run list, run detail, task list, artifact list, and the first review panels
+- Displays upstream review data, asset-image galleries, and storyboard shot summaries
+- Surfaces the current `awaiting_approval_stage` directly in the run detail header
+- Adds richer operator review interactions for `asset_images` and `storyboard`, including filters, search, lightbox preview, shot navigation, and reference-asset inspection
+
+### `run_operator_console.py`
+
+Current role:
+
+- Local uvicorn entrypoint for the operator console
+- Boots the combined API + UI shell on `127.0.0.1:8188`
 
 ### `ai_studio_flow/__init__.py`
 
@@ -67,10 +127,9 @@ Current role:
 Current role:
 
 - Unified local CLI entrypoint for the current script-to-video workflow
+- Thin wrapper over `app/workflow_service.py`
 - Supports both fresh-input execution and resume-from-`runN` execution
-- Skips already completed stages by checking canonical artifact paths
-- Runs board publishing via TOS when configured, otherwise falls back to GitHub + jsDelivr
-- Stops with an explicit commit/push requirement when jsDelivr URLs are still not public
+- Reads stage results from the shared service instead of duplicating orchestration logic
 
 ### `pipeline/runtime.py`
 
@@ -115,15 +174,19 @@ Current role:
 - Stops early when the router chooses `confirm_then_continue`
 - Reuses the normalized source text directly when the router chooses `direct_extract`
 - Generates `intent_packet.json`, `story_blueprint.json`, and `generated_script.txt` for transform paths
+- Backfills underspecified `scene_plan.visual_anchors` from beat-level anchors before validating `story_blueprint.json`
 - Generates `script_quality_report.json` for generated-script paths
 - Generates `asset_readiness_report.json` before asset extraction
 - Writes the current script candidate into `01_input/script_clean.txt` for downstream reuse
+- Canonicalizes router path and `recommended_operations` when the model returns a valid route with invalid operation ordering
+- Clears stale confirmation flags when the router already selected a concrete non-confirm path and backfills missing confirmation points for real confirm paths
 
 ### `prompts/intake_router.py`
 
 Current role:
 
 - Defines the system and user prompts for `intake_router.json`
+- Forces `recommended_operations` ordering to mirror the chosen route before validation
 
 ### `prompts/asset_readiness.py`
 
@@ -136,6 +199,7 @@ Current role:
 Current role:
 
 - Validates route choice, allowed operation combinations, and confirmation behavior for `intake_router.json`
+- Accepts `rewrite_for_asset_clarity + compress` when rewrite is the primary route
 
 ### `schemas/asset_readiness.py`
 
@@ -281,6 +345,8 @@ Current role:
 - Deterministically fills fixed top-level storyboard metadata
 - Validates the final result against the storyboard schema
 - Enforces extra cross-file checks such as contiguous segment coverage and valid shot asset references
+- Exposes `signature_prop_ids` and `default_prop_ids` in the prompt digest so the model can carry persistent props correctly
+- Allows shot props to come from covered segments, listed-character signature props, and covered/primary-scene default props
 - Writes `storyboard.json`
 
 ### `pipeline/shot_reference_boards.py`
