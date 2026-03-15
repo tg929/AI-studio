@@ -2,7 +2,7 @@
 
 ## Summary
 
-This project builds a script-to-video workflow using Volcano Engine models through a Python AgentKit application.
+This project builds a script-to-video workflow using Volcano Engine models through a Python AgentKit and VeADK application.
 
 The system currently supports two upstream intake families:
 
@@ -28,6 +28,7 @@ Current baseline:
 - `run10` is the first end-to-end completed baseline run from script through final stitched video.
 - The current final output is `runs/run10/10_final/final_video.mp4`.
 - Final stitching now supports both leading trim and a short leading black-screen cover on every shot so residual first-frame board frames can be hidden deterministically.
+- The current interactive runtime direction is `veadk web`, using a dedicated `ai_studio_flow` agent package instead of building a custom UI first.
 
 ## Default Input
 
@@ -54,6 +55,7 @@ Current baseline:
 
 - Python implementation
 - AgentKit / VeADK workflow
+- `veadk web` is the primary user-facing shell for the current interview/demo version
 - Volcano Engine text, image, and video models
 - The current short-intent expansion target is a roughly `60s`, `6-shot` micro-script before it enters the existing downstream flow
 - The upstream router should choose the minimum necessary path among `expand|compress|rewrite|direct_extract|confirm`
@@ -75,7 +77,7 @@ Current baseline:
 
 ## Not in V1
 
-- Advanced UI
+- Custom advanced UI
 - Fine-grained human review tooling
 - Automatic dubbing/music/subtitles
 - Multi-project orchestration

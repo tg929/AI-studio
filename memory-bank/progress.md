@@ -154,6 +154,11 @@ Last updated: 2026-03-15
   - `passes_hard_checks = true`
   - `repair_needed = false`
   - the generated script is now considered ready for downstream asset extraction and storyboard generation
+- Hardened `pipeline/asset_extraction.py` for unstable long JSON responses:
+  - tries JSON-mode first when the current text client supports it
+  - falls back safely when the current text model rejects `response_format={"type":"json_object"}`
+  - extracts the first balanced JSON object when the model wraps valid payloads with stray text
+  - retries once with a shorter JSON-only instruction when the first extraction response is invalid or truncated
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -163,7 +168,7 @@ Last updated: 2026-03-15
 
 ## Current Phase
 
-Workflow completion, upstream routing hardening, and interview-alignment cleanup.
+Workflow completion, VeADK web wrapping, upstream routing hardening, extraction robustness, and interview-alignment cleanup.
 
 The project now has:
 
@@ -183,20 +188,22 @@ The project now has:
 - one working Python intent-to-script upstream node
 - one working Python intake-router upstream node
 - one working Python asset-readiness gate for upstream script candidates
+- one working VeADK web workflow package under `ai_studio_flow/`
+- one working fresh end-to-end intent-to-video sample under `runs/run13`
 - project memory-bank setup
 
 ## Next Step
 
-- Run the first real end-to-end sample through the new router-guided upstream path.
 - Decide whether the first repair pass after `asset_readiness_report.json` should be automatic or confirmation-gated.
 - Add a unified user-facing entrypoint that supports `script|storyboard` output selection.
-- Replace the current generic AgentKit demo shell with a short-drama workflow wrapper suited to the interview brief.
-- Prepare an interview-facing README / demo flow / talk track around `run12`.
+- Run the first real `veadk web` session against `ai_studio_flow` and validate operator prompts plus tool behavior.
+- Prepare an interview-facing README / demo flow / talk track around `run13`.
 
 ## Known Constraints
 
 - Python only for implementation
 - AgentKit / VeADK is the target runtime
+- `veadk web` is now the preferred interactive shell over a custom frontend for the current phase
 - Asset images are labeled
 - One stitched board image per shot is sent to the video model
 - Each shot is 10 seconds
@@ -219,7 +226,6 @@ The project now has:
   - script quality review
 - `pipeline/intent_to_script.py` now treats the old heuristic `detect_input_mode()` only as a fallback hint for routing and prompt defaults.
 - The first automatic repair pass after `asset_readiness_report.json` is not implemented yet.
-- The first verification for the new intent-to-script path is a dry run only; the first real sample generation is still pending.
 - The first real sample for the new intent-to-script path has now completed under `runs/run11`.
 - During the first real `run11` attempt, the story-blueprint stage exposed a practical drift case:
   - a scene `visual_anchors` list exceeded the schema max length
@@ -241,6 +247,29 @@ The project now has:
   - `09_shot_videos/shot_videos_manifest.json`
   - `10_final/final_video.mp4`
   - `10_final/final_video_manifest.json`
+- Completed a fresh rerun of the full intent-to-video path under `runs/run13`:
+  - `02_assets/asset_registry.json`
+  - `03_style/style_bible.json`
+  - `04_asset_prompts/asset_prompts.json`
+  - `05_asset_images/asset_images_manifest.json`
+  - `06_storyboard/storyboard.json`
+  - `07_shot_reference_boards/shot_reference_manifest.json`
+  - `08_video_jobs/video_jobs.json`
+  - `09_shot_videos/shot_videos_manifest.json` with `13/13` succeeded
+  - `10_final/final_video.mp4`
+- Created a dedicated VeADK web package `ai_studio_flow/` via `veadk create`.
+- Added `ai_studio_flow/agent.py` with a `root_agent` for the full script-to-video workflow.
+- Added `ai_studio_flow/workflow_tools.py` as the VeADK wrapper layer around the existing pipeline stages.
+- The new VeADK mainline now covers:
+  - user input / upstream routing
+  - parallel asset extraction + storyboard-seed planning
+  - style bible / asset prompts / asset images
+  - storyboard / shot reference boards
+  - board publishing / video jobs / shot videos / final concat
+- Verified the new VeADK package loads through the ADK agent loader as `ai_studio_flow`.
+- Added `.env` ignore rules so local VeADK env files stay out of git.
+- Added `tos` to `requirements.txt` for the TOS board-publishing path.
+- Full continuation into shot-video generation now depends on `BOARD_TOS_*` envs in `ai_studio_flow/.env`.
 - Reworked shot-board composition so asset completeness now takes priority over forced cell fill:
   - `grid_1x1`, `grid_2x1`, `grid_2x2`, and `grid_3x2` now use adaptive row layouts
   - all shot-board assets are rendered with full-image containment instead of default `cover` cropping

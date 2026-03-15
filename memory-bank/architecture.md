@@ -8,13 +8,40 @@ Last updated: 2026-03-15
 
 Current role:
 
-- Basic AgentKit app entrypoint
-- Exposes one simple agent
-- Mounts text, image, and video-related tools
+- Legacy AgentKit demo entrypoint
+- Still useful for isolated local experiments
+- No longer the main interactive shell for the full workflow
 
 Future role:
 
-- Likely becomes the workflow entry shell or delegates to workflow modules
+- Optional smoke-test or fallback demo entrypoint
+
+### `ai_studio_flow/agent.py`
+
+Current role:
+
+- Primary VeADK web entrypoint for the current project
+- Exposes `root_agent`
+- Mounts the full workflow operator tools inside `veadk web`
+- Instructs the agent to prefer the end-to-end mainline tool for normal user requests
+
+### `ai_studio_flow/workflow_tools.py`
+
+Current role:
+
+- Wraps the existing pipeline modules as VeADK-callable tools
+- Maintains session workflow state such as `current_run_dir`
+- Starts or resumes runs from user input
+- Implements the current mainline workflow orchestration
+- Runs asset extraction and storyboard-seed planning in parallel
+- Continues through style, asset prompts, asset images, storyboard, boards, publish, video jobs, shot videos, and final concat
+- Publishes stitched boards to TOS when `BOARD_TOS_*` envs are configured
+
+### `ai_studio_flow/__init__.py`
+
+Current role:
+
+- Re-exports `root_agent` so the package can be discovered cleanly by VeADK / ADK loaders
 
 ### `extract_assets.py`
 
@@ -57,6 +84,9 @@ Current role:
 - Writes input artifacts
 - Supports both file-based script input and direct in-memory script text input
 - Calls the text model
+- Attempts JSON-mode when supported by the current text client
+- Extracts the first balanced JSON object from mixed-content responses
+- Retries once with a shorter JSON-only instruction when the first response is invalid or truncated
 - Normalizes observed model field aliases
 - Validates the result against the asset schema
 - Writes `asset_registry.json`
@@ -437,6 +467,21 @@ Notes:
 - Local-only
 - Must never be committed
 
+### `.gitignore`
+
+Current role:
+
+- Ignores `.venv/`, local config, generated runs, and other local-only artifacts
+- Now also ignores `.env` and `.env.*` so VeADK package env files remain local
+
+### `requirements.txt`
+
+Current role:
+
+- Tracks the Python package set for the project venv
+- Includes `veadk-python` and `agentkit-sdk-python`
+- Now includes `tos` for TOS-backed board publishing from the VeADK workflow wrapper
+
 ### `smoke_test_models.py`
 
 Current role:
@@ -467,6 +512,11 @@ Current role:
 ## Planned Runtime Structure
 
 The module layout is now partially implemented:
+
+- `ai_studio_flow/`
+  - `__init__.py`
+  - `agent.py`
+  - `workflow_tools.py`
 
 - `pipeline/`
   - `runtime.py`
