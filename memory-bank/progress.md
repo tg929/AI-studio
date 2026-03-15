@@ -183,6 +183,7 @@ Last updated: 2026-03-16
   - scene sheets still drift toward presentation-board framing and may still include human figures
   - prompt-only tuning is helping most on characters and much less on scenes / props
 - Added a standalone `workflow_overview.html` page that visualizes the current code-level pipeline from upstream routing through final video concatenation in a reference-diagram style.
+- Adjusted the operator-console video layout so `Shot Videos` appears above `Final Video`, and paused automatic run-detail polling while any console video is actively playing or the media modal is open so local playback previews no longer get interrupted by DOM re-rendering.
 
 ## Current Phase
 

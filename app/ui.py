@@ -1043,6 +1043,15 @@ def build_console_html() -> str:
       content.innerHTML = '';
     }
 
+    function isMediaModalOpen() {
+      const modal = document.getElementById('media_modal');
+      return Boolean(modal && modal.classList && modal.classList.contains('open'));
+    }
+
+    function hasActiveVideoPlayback() {
+      return Array.from(document.querySelectorAll('video')).some(video => !video.paused && !video.ended);
+    }
+
     function renderAssetImagesReview(reviewPayload) {
       const summary = reviewPayload?.payload?.summary || {};
       const summaryHtml = `
@@ -1601,9 +1610,9 @@ def build_console_html() -> str:
           </div>
         </section>
 
-        ${renderFinalVideoPanel(videoSummaryCache)}
-
         ${renderShotVideosPanel(videoSummaryCache)}
+
+        ${renderFinalVideoPanel(videoSummaryCache)}
 
         <section class="panel" style="padding:16px">
           <h2>Tasks</h2>
@@ -1628,6 +1637,9 @@ def build_console_html() -> str:
 
     async function pollCurrentRun() {
       if (!selectedRunId) {
+        return;
+      }
+      if (isMediaModalOpen() || hasActiveVideoPlayback()) {
         return;
       }
       try {
