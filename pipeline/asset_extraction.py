@@ -131,6 +131,50 @@ def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def extract_first_json_object(raw_text: str) -> str:
+    text = raw_text.strip()
+    if not text:
+        raise ValueError("Empty response content")
+
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("Response does not contain a JSON object")
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    raise ValueError("Response JSON object is truncated")
+
+
+def parse_asset_registry_response(raw_text: str) -> dict[str, Any]:
+    text = raw_text.strip()
+    if not text:
+        raise ValueError("Empty response content")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return json.loads(extract_first_json_object(text))
+
+
 def create_script_clean_payload(
     *,
     source_script_name: str,
@@ -187,22 +231,76 @@ def extract_asset_registry_from_text(
         return artifacts
 
     client = build_text_client(model_config)
-    response = client.chat.completions.create(
-        model=model_config.model_name,
-        messages=[
-            {"role": "system", "content": ASSET_EXTRACTION_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.0,
-        max_tokens=8192,
-        timeout=600.0,
-    )
     response_path = artifacts.asset_dir / "asset_extraction_response.json"
+    retry_request_path = artifacts.asset_dir / "asset_extraction_retry_request.json"
+    retry_response_path = artifacts.asset_dir / "asset_extraction_retry_response.json"
+
+    messages = [
+        {"role": "system", "content": ASSET_EXTRACTION_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    def run_completion(request_messages: list[dict[str, str]], *, max_tokens: int):
+        try:
+            return client.chat.completions.create(
+                model=model_config.model_name,
+                messages=request_messages,
+                temperature=0.0,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+                timeout=600.0,
+            )
+        except TypeError:
+            return client.chat.completions.create(
+                model=model_config.model_name,
+                messages=request_messages,
+                temperature=0.0,
+                max_tokens=max_tokens,
+                timeout=600.0,
+            )
+
+    response = run_completion(messages, max_tokens=16384)
     write_json(response_path, dump_model(response))
 
+    finish_reason = getattr(response.choices[0], "finish_reason", "")
     content = extract_text_content(response.choices[0].message.content)
-    parsed = normalize_asset_registry_payload(json.loads(content))
-    registry = AssetRegistry.model_validate(parsed)
+
+    try:
+        parsed = normalize_asset_registry_payload(parse_asset_registry_response(content))
+        registry = AssetRegistry.model_validate(parsed)
+    except Exception as first_error:
+        retry_user_prompt = (
+            user_prompt
+            + "\n\nIMPORTANT RETRY CONSTRAINTS:\n"
+            + "- Return a shorter but still complete asset_registry.json.\n"
+            + "- Output valid JSON only.\n"
+            + "- Do not include any notes, planning text, or explanations.\n"
+            + "- Keep every string concise.\n"
+            + "- Do not repeat schema instructions.\n"
+            + f"- The previous response was invalid or truncated (finish_reason={finish_reason or 'unknown'}).\n"
+        )
+        write_json(
+            retry_request_path,
+            {
+                "model": model_config.model_name,
+                "base_url": model_config.base_url,
+                "system_prompt": ASSET_EXTRACTION_SYSTEM_PROMPT,
+                "user_prompt": retry_user_prompt,
+                "source_script_name": source_script_name,
+                "retry_reason": str(first_error),
+                "previous_finish_reason": finish_reason,
+            },
+        )
+        retry_messages = [
+            {"role": "system", "content": ASSET_EXTRACTION_SYSTEM_PROMPT},
+            {"role": "user", "content": retry_user_prompt},
+        ]
+        retry_response = run_completion(retry_messages, max_tokens=16384)
+        write_json(retry_response_path, dump_model(retry_response))
+        retry_content = extract_text_content(retry_response.choices[0].message.content)
+        parsed = normalize_asset_registry_payload(parse_asset_registry_response(retry_content))
+        registry = AssetRegistry.model_validate(parsed)
+
     registry_path = artifacts.asset_dir / "asset_registry.json"
     write_json(registry_path, registry.model_dump(mode="json"))
 
