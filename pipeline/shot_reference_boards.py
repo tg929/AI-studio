@@ -28,7 +28,7 @@ LABEL_BAR_MAX_HEIGHT_PX = 104
 LABEL_SIDE_PADDING_PX = 24
 LABEL_FONT_MIN_SIZE = 18
 LABEL_FONT_DIVISOR = 3
-DUAL_ASSET_GAP_PX = 24
+DUAL_ASSET_GAP_PX = 0
 BORDER_ACTIVITY_STD_THRESHOLD = 14.0
 TRIM_BACKOFF_PX = 2
 MAX_VERTICAL_TRIM_RATIO = 0.12
@@ -134,48 +134,106 @@ def build_target_boxes(layout_template: str) -> list[dict[str, int]]:
     return boxes
 
 
-def build_dual_asset_boxes(ordered_assets: list[dict[str, str]]) -> list[dict[str, int]]:
-    if len(ordered_assets) != 2:
-        raise ValueError(f"Dual-asset layout expects exactly 2 assets, got {len(ordered_assets)}")
-
-    label_height = resolve_label_height(CANVAS_HEIGHT)
-    max_image_height = max(1, CANVAS_HEIGHT - label_height)
-    aspects: list[float] = []
-    for asset in ordered_assets:
-        trimmed_width, trimmed_height = load_trimmed_image(asset["source_image_path"]).size
-        aspects.append(trimmed_width / trimmed_height)
-
-    available_width = CANVAS_WIDTH - 2 * OUTER_PADDING_PX - DUAL_ASSET_GAP_PX
-    common_image_height = min(
-        max_image_height,
-        max(1, int(available_width / sum(aspects))),
+def resolve_adaptive_row_counts(layout_template: str, asset_count: int) -> list[int]:
+    if layout_template == "grid_1x1":
+        return [1]
+    if layout_template == "grid_2x1":
+        return [2]
+    if layout_template == "grid_2x2":
+        if asset_count == 3:
+            return [1, 2]
+        if asset_count == 4:
+            return [2, 2]
+    if layout_template == "grid_3x2":
+        if asset_count == 5:
+            return [2, 3]
+        if asset_count == 6:
+            return [3, 3]
+    raise ValueError(
+        f"Unsupported adaptive row layout for template {layout_template} with asset_count {asset_count}"
     )
-    widths = [max(1, int(round(aspect * common_image_height))) for aspect in aspects]
-    row_width = sum(widths) + DUAL_ASSET_GAP_PX
-    if row_width > CANVAS_WIDTH:
-        overflow = row_width - CANVAS_WIDTH
-        widths[-1] = max(1, widths[-1] - overflow)
-        row_width = sum(widths) + DUAL_ASSET_GAP_PX
 
-    box_height = common_image_height + label_height
-    start_x = max(0, (CANVAS_WIDTH - row_width) // 2)
-    start_y = max(0, (CANVAS_HEIGHT - box_height) // 2)
 
-    boxes: list[dict[str, int]] = []
-    current_x = start_x
-    for index, width in enumerate(widths, start=1):
-        boxes.append(
+def build_adaptive_layout_boxes(
+    ordered_assets: list[dict[str, str]],
+    *,
+    layout_template: str,
+) -> list[dict[str, int]]:
+    row_counts = resolve_adaptive_row_counts(layout_template, len(ordered_assets))
+    label_height = resolve_label_height(max(1, CANVAS_HEIGHT // len(row_counts)))
+    row_gap = DUAL_ASSET_GAP_PX
+    available_width = max(1, CANVAS_WIDTH - 2 * OUTER_PADDING_PX)
+    available_image_height = max(
+        1,
+        CANVAS_HEIGHT - 2 * OUTER_PADDING_PX - (len(row_counts) - 1) * row_gap - len(row_counts) * label_height,
+    )
+
+    cursor = 0
+    row_specs: list[dict[str, object]] = []
+    natural_image_height_sum = 0.0
+    for row_index, row_count in enumerate(row_counts, start=1):
+        row_assets = ordered_assets[cursor : cursor + row_count]
+        cursor += row_count
+        aspects: list[float] = []
+        for asset in row_assets:
+            trimmed_width, trimmed_height = load_trimmed_image(asset["source_image_path"]).size
+            aspects.append(trimmed_width / trimmed_height)
+        row_available_width = max(1, available_width - (row_count - 1) * row_gap)
+        natural_image_height = row_available_width / sum(aspects)
+        natural_image_height_sum += natural_image_height
+        row_specs.append(
             {
-                "slot_index": index,
-                "row": 1,
-                "col": index,
-                "x": current_x,
-                "y": start_y,
-                "width": width,
-                "height": box_height,
+                "row_index": row_index,
+                "row_count": row_count,
+                "aspects": aspects,
+                "natural_image_height": natural_image_height,
             }
         )
-        current_x += width + DUAL_ASSET_GAP_PX
+
+    scale = min(1.0, available_image_height / natural_image_height_sum) if natural_image_height_sum > 0 else 1.0
+
+    boxes: list[dict[str, int]] = []
+    realized_rows: list[dict[str, object]] = []
+    for row_spec in row_specs:
+        image_height = max(1, int(round(float(row_spec["natural_image_height"]) * scale)))
+        widths = [
+            max(1, int(round(aspect * image_height)))
+            for aspect in row_spec["aspects"]  # type: ignore[index]
+        ]
+        row_width = sum(widths) + (int(row_spec["row_count"]) - 1) * row_gap
+        realized_rows.append(
+            {
+                "row_index": row_spec["row_index"],
+                "widths": widths,
+                "image_height": image_height,
+                "row_width": row_width,
+            }
+        )
+
+    total_height = sum(int(row["image_height"]) + label_height for row in realized_rows) + row_gap * (
+        len(realized_rows) - 1
+    )
+    current_y = max(OUTER_PADDING_PX, (CANVAS_HEIGHT - total_height) // 2)
+    slot_index = 1
+    for row in realized_rows:
+        row_box_height = int(row["image_height"]) + label_height
+        current_x = max(OUTER_PADDING_PX, (CANVAS_WIDTH - int(row["row_width"])) // 2)
+        for col_index, width in enumerate(row["widths"], start=1):
+            boxes.append(
+                {
+                    "slot_index": slot_index,
+                    "row": int(row["row_index"]),
+                    "col": col_index,
+                    "x": current_x,
+                    "y": current_y,
+                    "width": width,
+                    "height": row_box_height,
+                    "label_height": label_height,
+                }
+            )
+            current_x += width + row_gap
+            slot_index += 1
+        current_y += row_box_height + row_gap
     return boxes
 
 
@@ -352,8 +410,8 @@ def resolve_label_height(box_height: int) -> int:
     )
 
 
-def split_slot_box(box: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
-    label_height = resolve_label_height(int(box["height"]))
+def split_slot_box(box: dict[str, int], label_height: int | None = None) -> tuple[dict[str, int], dict[str, int]]:
+    label_height = label_height or resolve_label_height(int(box["height"]))
     image_height = max(1, int(box["height"]) - label_height)
     image_box = {
         "x": int(box["x"]),
@@ -408,12 +466,12 @@ def render_board_image(slots: list[dict[str, object]], output_path: Path) -> Non
     for slot in slots:
         image = load_trimmed_image(str(slot["source_image_path"]))
         box = slot["target_box"]
-        image_box, label_box = split_slot_box(box)
+        image_box, label_box = split_slot_box(box, int(slot["label_height"]) if "label_height" in slot else None)
         fit_mode = str(slot.get("fit_mode", "cover"))
-        if fit_mode == "contain":
+        if fit_mode in {"contain", "adaptive"}:
             resized = resize_contain(image, image_box["width"], image_box["height"])
             paste_x = image_box["x"] + (image_box["width"] - resized.width) // 2
-            paste_y = image_box["y"] + (image_box["height"] - resized.height)
+            paste_y = image_box["y"] + (image_box["height"] - resized.height) // 2
             canvas.paste(resized, (paste_x, paste_y))
         else:
             resized = resize_cover(image, image_box["width"], image_box["height"])
@@ -442,16 +500,11 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
         ordered_assets = build_ordered_assets(shot, asset_image_map)
         asset_count = len(ordered_assets)
         layout_template = resolve_layout_template(asset_count)
-        target_boxes = (
-            build_dual_asset_boxes(ordered_assets)
-            if layout_template == "grid_2x1"
-            else build_target_boxes(layout_template)
-        )
+        target_boxes = build_adaptive_layout_boxes(ordered_assets, layout_template=layout_template)
         board_path = (artifacts.boards_dir / f"{shot.id}.png").resolve()
 
         render_slots_payload: list[dict[str, object]] = []
         slots_payload: list[dict[str, object]] = []
-        blank_slots: list[int] = []
         for box, asset in zip(target_boxes, ordered_assets, strict=False):
             render_slots_payload.append(
                 {
@@ -462,7 +515,8 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
                     "asset_id": asset["asset_id"],
                     "source_image_path": asset["source_image_path"],
                     "label_text": asset["label_text"],
-                    "fit_mode": "contain" if layout_template == "grid_2x1" else "cover",
+                    "fit_mode": "adaptive",
+                    "label_height": box["label_height"],
                     "target_box": {
                         "x": box["x"],
                         "y": box["y"],
@@ -487,7 +541,8 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
                     },
                 }
             )
-        blank_slots.extend(box["slot_index"] for box in target_boxes[len(ordered_assets) :])
+        expected_cells = LAYOUT_DIMENSIONS[layout_template][0] * LAYOUT_DIMENSIONS[layout_template][1]
+        blank_slots = list(range(asset_count + 1, expected_cells + 1))
 
         render_board_image(render_slots_payload, board_path)
 

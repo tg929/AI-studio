@@ -218,11 +218,14 @@ Current role:
 
 - Loads and validates `storyboard.json`
 - Resolves and validates the matching `asset_images_manifest.json`
+- Builds aspect-ratio-aware stitched boards with adaptive row layouts instead of fixed crop-first grid filling
+- Preserves full asset visibility as the first rule and only then maximizes board occupancy
+- Uses deterministic local label bars below each asset instead of overlaying labels on top of imagery
 - Selects the shot's scene asset plus visible character/prop assets in deterministic order
 - Chooses a fixed grid template from asset count
 - Trims uniform outer borders from raw asset reference images before placement
-- Uses an adaptive two-asset layout for `grid_2x1` boards so differing aspect ratios are shown completely before any attempt to maximize fill
-- Uses edge-to-edge grid cells plus cover-fit composition so each occupied slot fills its assigned area
+- Uses adaptive row splits across `grid_1x1`, `grid_2x1`, `grid_2x2`, and `grid_3x2`, including `1 + 2` packing for three-asset boards
+- Uses contain-fit rendering inside the computed slot boxes so the composed board never crops the source asset sheets
 - Reserves a dedicated bottom label area per occupied slot so labels do not occlude the rendered reference imagery
 - Renders a consistent local black label bar from clean text instead of reusing the padded labeled-card bitmap directly
 - Renders one PNG stitched board per shot using local image composition only

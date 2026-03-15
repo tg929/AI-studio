@@ -145,7 +145,7 @@ Last updated: 2026-03-15
 
 ## Current Phase
 
-Early workflow implementation.
+Workflow completion and interview-alignment cleanup.
 
 The project now has:
 
@@ -167,12 +167,10 @@ The project now has:
 
 ## Next Step
 
-- Run the first real intent-to-script sample from keywords / brief and review:
-  - `intent_packet.json`
-  - `story_blueprint.json`
-  - `generated_script.txt`
-  - `script_quality_report.json`
-- Then decide whether to add an automatic repair loop before asset extraction or keep the first version human-reviewed
+- Add a unified user-facing entrypoint that supports `script|storyboard` output selection.
+- Insert an explicit synopsis-confirmation gate before full-script generation in the intent-to-script path.
+- Replace the current generic AgentKit demo shell with a short-drama workflow wrapper suited to the interview brief.
+- Prepare an interview-facing README / demo flow / talk track around `run12`.
 
 ## Known Constraints
 
@@ -213,8 +211,17 @@ The project now has:
   - `06_storyboard/storyboard.json`
   - `07_shot_reference_boards/shot_reference_manifest.json`
   - `08_video_jobs/video_jobs.json`
-- Current `run12` blocker:
-  - `video_jobs.json` is assembled successfully, but jobs are still `blocked_missing_first_frame_url` because the new `run12` shot boards have not yet been published to a real public URL
+- Completed the first full intent-to-video continuation run under `runs/run12`:
+  - `09_shot_videos/shot_videos_manifest.json`
+  - `10_final/final_video.mp4`
+  - `10_final/final_video_manifest.json`
+- Reworked shot-board composition so asset completeness now takes priority over forced cell fill:
+  - `grid_1x1`, `grid_2x1`, `grid_2x2`, and `grid_3x2` now use adaptive row layouts
+  - all shot-board assets are rendered with full-image containment instead of default `cover` cropping
+  - three-asset boards now use a `1 + 2` row split, which preserves the full scene board while keeping the lower references readable
+  - regenerated `runs/run12/07_shot_reference_boards/*.png` with the new layout logic
+- Republished the regenerated `run12` shot boards into `static/runs/run12/...` and restored jsDelivr-style `board_public_url` values in `07_shot_reference_boards/shot_reference_manifest.json`.
+- Any future downstream reuse of the updated `run12` boards still requires committing and pushing the refreshed `static/runs/run12/...` files so the public CDN matches the local board images.
 - If the new intent-to-script node resolves the source input mode to `script`, it currently reuses the normalized source text instead of rewriting it.
 - The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
 - The style-bible node uses the same prompt-constrained JSON + local schema validation path.
