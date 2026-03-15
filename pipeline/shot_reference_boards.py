@@ -19,7 +19,7 @@ OUTER_PADDING_PX = 0
 GUTTER_PX = 0
 BACKGROUND_COLOR = "#FFFFFF"
 BLANK_CELL_FILL = "#FFFFFF"
-FIT_MODE = "cover"
+FIT_MODE = "adaptive"
 LABEL_BAR_FILL = "#000000"
 LABEL_TEXT_FILL = "#FFFFFF"
 LABEL_BAR_HEIGHT_RATIO = 0.14
@@ -28,6 +28,7 @@ LABEL_BAR_MAX_HEIGHT_PX = 104
 LABEL_SIDE_PADDING_PX = 24
 LABEL_FONT_MIN_SIZE = 18
 LABEL_FONT_DIVISOR = 3
+DUAL_ASSET_GAP_PX = 24
 BORDER_ACTIVITY_STD_THRESHOLD = 14.0
 TRIM_BACKOFF_PX = 2
 MAX_VERTICAL_TRIM_RATIO = 0.12
@@ -130,6 +131,51 @@ def build_target_boxes(layout_template: str) -> list[dict[str, int]]:
                 }
             )
             slot_index += 1
+    return boxes
+
+
+def build_dual_asset_boxes(ordered_assets: list[dict[str, str]]) -> list[dict[str, int]]:
+    if len(ordered_assets) != 2:
+        raise ValueError(f"Dual-asset layout expects exactly 2 assets, got {len(ordered_assets)}")
+
+    label_height = resolve_label_height(CANVAS_HEIGHT)
+    max_image_height = max(1, CANVAS_HEIGHT - label_height)
+    aspects: list[float] = []
+    for asset in ordered_assets:
+        trimmed_width, trimmed_height = load_trimmed_image(asset["source_image_path"]).size
+        aspects.append(trimmed_width / trimmed_height)
+
+    available_width = CANVAS_WIDTH - 2 * OUTER_PADDING_PX - DUAL_ASSET_GAP_PX
+    common_image_height = min(
+        max_image_height,
+        max(1, int(available_width / sum(aspects))),
+    )
+    widths = [max(1, int(round(aspect * common_image_height))) for aspect in aspects]
+    row_width = sum(widths) + DUAL_ASSET_GAP_PX
+    if row_width > CANVAS_WIDTH:
+        overflow = row_width - CANVAS_WIDTH
+        widths[-1] = max(1, widths[-1] - overflow)
+        row_width = sum(widths) + DUAL_ASSET_GAP_PX
+
+    box_height = common_image_height + label_height
+    start_x = max(0, (CANVAS_WIDTH - row_width) // 2)
+    start_y = max(0, (CANVAS_HEIGHT - box_height) // 2)
+
+    boxes: list[dict[str, int]] = []
+    current_x = start_x
+    for index, width in enumerate(widths, start=1):
+        boxes.append(
+            {
+                "slot_index": index,
+                "row": 1,
+                "col": index,
+                "x": current_x,
+                "y": start_y,
+                "width": width,
+                "height": box_height,
+            }
+        )
+        current_x += width + DUAL_ASSET_GAP_PX
     return boxes
 
 
@@ -275,6 +321,10 @@ def trim_uniform_border(image: Image.Image) -> Image.Image:
     return image.crop((crop_left, crop_top, crop_right, crop_bottom))
 
 
+def load_trimmed_image(source_image_path: str | Path) -> Image.Image:
+    return trim_uniform_border(Image.open(Path(source_image_path)).convert("RGB"))
+
+
 def resize_cover(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
     scale = max(target_width / image.width, target_height / image.height)
     resized_width = max(1, int(round(image.width * scale)))
@@ -288,11 +338,22 @@ def resize_cover(image: Image.Image, target_width: int, target_height: int) -> I
     return resized.crop((crop_left, crop_top, crop_right, crop_bottom))
 
 
-def split_slot_box(box: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
-    label_height = max(
+def resize_contain(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    scale = min(target_width / image.width, target_height / image.height)
+    resized_width = max(1, int(round(image.width * scale)))
+    resized_height = max(1, int(round(image.height * scale)))
+    return image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+
+
+def resolve_label_height(box_height: int) -> int:
+    return max(
         LABEL_BAR_MIN_HEIGHT_PX,
-        min(LABEL_BAR_MAX_HEIGHT_PX, int(box["height"] * LABEL_BAR_HEIGHT_RATIO)),
+        min(LABEL_BAR_MAX_HEIGHT_PX, int(box_height * LABEL_BAR_HEIGHT_RATIO)),
     )
+
+
+def split_slot_box(box: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+    label_height = resolve_label_height(int(box["height"]))
     image_height = max(1, int(box["height"]) - label_height)
     image_box = {
         "x": int(box["x"]),
@@ -345,12 +406,18 @@ def render_board_image(slots: list[dict[str, object]], output_path: Path) -> Non
     font_path = resolve_label_font_path()
 
     for slot in slots:
-        source_image_path = Path(str(slot["source_image_path"]))
-        image = trim_uniform_border(Image.open(source_image_path).convert("RGB"))
+        image = load_trimmed_image(str(slot["source_image_path"]))
         box = slot["target_box"]
         image_box, label_box = split_slot_box(box)
-        resized = resize_cover(image, image_box["width"], image_box["height"])
-        canvas.paste(resized, (image_box["x"], image_box["y"]))
+        fit_mode = str(slot.get("fit_mode", "cover"))
+        if fit_mode == "contain":
+            resized = resize_contain(image, image_box["width"], image_box["height"])
+            paste_x = image_box["x"] + (image_box["width"] - resized.width) // 2
+            paste_y = image_box["y"] + (image_box["height"] - resized.height)
+            canvas.paste(resized, (paste_x, paste_y))
+        else:
+            resized = resize_cover(image, image_box["width"], image_box["height"])
+            canvas.paste(resized, (image_box["x"], image_box["y"]))
         render_slot_label(
             draw=draw,
             font_path=font_path,
@@ -375,7 +442,11 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
         ordered_assets = build_ordered_assets(shot, asset_image_map)
         asset_count = len(ordered_assets)
         layout_template = resolve_layout_template(asset_count)
-        target_boxes = build_target_boxes(layout_template)
+        target_boxes = (
+            build_dual_asset_boxes(ordered_assets)
+            if layout_template == "grid_2x1"
+            else build_target_boxes(layout_template)
+        )
         board_path = (artifacts.boards_dir / f"{shot.id}.png").resolve()
 
         render_slots_payload: list[dict[str, object]] = []
@@ -391,6 +462,7 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
                     "asset_id": asset["asset_id"],
                     "source_image_path": asset["source_image_path"],
                     "label_text": asset["label_text"],
+                    "fit_mode": "contain" if layout_template == "grid_2x1" else "cover",
                     "target_box": {
                         "x": box["x"],
                         "y": box["y"],

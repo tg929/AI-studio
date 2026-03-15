@@ -313,15 +313,23 @@ The project now has:
   - `07_shot_reference_boards/boards/*.png` now use zero outer padding and zero gutter
   - occupied cells now fill their quarter/half-grid areas much more tightly than the previous `contain` layout
   - slot labels now use reserved bottom bands instead of overlaying the imagery, which removed the visible occlusion in `shot_012`
+  - `grid_2x1` boards now use a separate adaptive layout path that preserves complete asset visibility before maximizing fill, so two-asset shots no longer crop wide reference sheets just to fill half-screen boxes
   - `08_video_jobs/video_jobs.json` still validates afterward and remains blocked only by missing public `board_public_url` values
 - `run12` has now also been republished into the repo-local `static/` tree with jsDelivr URL placeholders:
   - `runs/run12/07_shot_reference_boards/board_publish_result.json` points at `https://cdn.jsdelivr.net/gh/tg929/AI-studio@main/static/runs/run12/...`
   - `runs/run12/08_video_jobs/video_jobs.json` now marks all 12 jobs as `ready`
   - the copied board PNGs exist under `static/runs/run12/07_shot_reference_boards/boards/`
-- A real `09_shot_videos` smoke test was attempted for `run12/shot_001`:
-  - the video task creation failed immediately with `ArkBadRequestError`
-  - backend message: `content[1].image_url` is invalid because the resource was not found
-  - current blocker is no longer local pipeline assembly; it is that `static/runs/run12/...` has not been committed and pushed to GitHub yet, so jsDelivr cannot serve those new board files
+- `run12` was then pushed to `origin/main`, and the published board URLs were verified live:
+  - both `raw.githubusercontent.com` and jsDelivr returned `200` for `static/runs/run12/.../shot_001.png`
+  - the public first-frame URL problem is resolved for this run
+- A real full `09_shot_videos` execution was then attempted for `run12`:
+  - `shot_001` through `shot_008` succeeded and local mp4 files now exist under `runs/run12/09_shot_videos/videos/`
+  - task creation for `shot_009` failed with `AccountOverdueError`
+  - `shot_010` through `shot_012` were not submitted after that external billing failure
+  - `runs/run12/09_shot_videos/shot_videos_manifest.json` was reconstructed to preserve the current 8-success / 4-failed state
+- `pipeline/shot_videos.py` was updated for better resumability:
+  - it now writes `shot_videos_manifest.json` incrementally after each accumulated result
+  - future long runs will keep partial progress even if a later external API error interrupts the command
 - Current locked storyboard/video-prep decisions:
   - the later shot board is the video model `first_frame`
   - `storyboard.json` is a structured shot-planning contract, not the final video prompt

@@ -221,6 +221,7 @@ Current role:
 - Selects the shot's scene asset plus visible character/prop assets in deterministic order
 - Chooses a fixed grid template from asset count
 - Trims uniform outer borders from raw asset reference images before placement
+- Uses an adaptive two-asset layout for `grid_2x1` boards so differing aspect ratios are shown completely before any attempt to maximize fill
 - Uses edge-to-edge grid cells plus cover-fit composition so each occupied slot fills its assigned area
 - Reserves a dedicated bottom label area per occupied slot so labels do not occlude the rendered reference imagery
 - Renders a consistent local black label bar from clean text instead of reusing the padded labeled-card bitmap directly
@@ -253,7 +254,8 @@ Current role:
 - Loads and validates `video_jobs.json`
 - Builds the video-task payload using one shot prompt plus one `first_frame` image URL
 - Submits content-generation tasks to the video model
-- Polls task status, downloads succeeded video files, and writes `shot_videos_manifest.json`
+- Polls task status and downloads succeeded video files
+- Persists `shot_videos_manifest.json` incrementally as results accumulate so partial progress survives long-running interruptions
 
 ### `pipeline/final_video.py`
 

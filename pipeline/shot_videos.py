@@ -98,6 +98,37 @@ def build_task_content(prompt: str, first_frame_url: str) -> list[dict[str, obje
     ]
 
 
+def write_manifest_snapshot(
+    *,
+    artifacts: ShotVideoArtifacts,
+    video_jobs: VideoJobsManifest,
+    model_name: str,
+    resolution: str,
+    timeout_seconds: int,
+    poll_interval_seconds: int,
+    keep_remote_media: bool,
+    results_payload: list[dict[str, object]],
+) -> None:
+    if not results_payload:
+        return
+    manifest_payload = {
+        "schema_version": "1.0",
+        "source_run": artifacts.run_dir.name,
+        "source_script_name": video_jobs.source_script_name,
+        "title": video_jobs.title,
+        "video_model": model_name,
+        "execution_spec": {
+            "resolution": resolution,
+            "timeout_seconds": timeout_seconds,
+            "poll_interval_seconds": poll_interval_seconds,
+            "keep_remote_media": keep_remote_media,
+        },
+        "results": results_payload,
+    }
+    manifest = ShotVideosManifest.model_validate(manifest_payload)
+    write_json(artifacts.output_dir / "shot_videos_manifest.json", manifest.model_dump(mode="json"))
+
+
 def generate_shot_videos(
     *,
     video_jobs_path: Path,
@@ -148,6 +179,16 @@ def generate_shot_videos(
                 results_payload.append(existing_results_by_shot[job.shot_id])
             else:
                 results_payload.append({**base_result, "status": "skipped_not_selected"})
+            write_manifest_snapshot(
+                artifacts=artifacts,
+                video_jobs=video_jobs,
+                model_name=model_config.model_name,
+                resolution=resolution,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                keep_remote_media=keep_remote_media,
+                results_payload=results_payload,
+            )
             continue
         if job.status != "ready":
             if job.shot_id in existing_results_by_shot:
@@ -160,6 +201,16 @@ def generate_shot_videos(
                         "error_message": f"video job status is {job.status}",
                     }
                 )
+            write_manifest_snapshot(
+                artifacts=artifacts,
+                video_jobs=video_jobs,
+                model_name=model_config.model_name,
+                resolution=resolution,
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                keep_remote_media=keep_remote_media,
+                results_payload=results_payload,
+            )
             continue
 
         request_payload = {
@@ -230,22 +281,15 @@ def generate_shot_videos(
                 "error_message": error_message,
             }
         )
-
-    manifest_payload = {
-        "schema_version": "1.0",
-        "source_run": run_dir.name,
-        "source_script_name": video_jobs.source_script_name,
-        "title": video_jobs.title,
-        "video_model": model_config.model_name,
-        "execution_spec": {
-            "resolution": resolution,
-            "timeout_seconds": timeout_seconds,
-            "poll_interval_seconds": poll_interval_seconds,
-            "keep_remote_media": keep_remote_media,
-        },
-        "results": results_payload,
-    }
-    manifest = ShotVideosManifest.model_validate(manifest_payload)
-    write_json(artifacts.output_dir / "shot_videos_manifest.json", manifest.model_dump(mode="json"))
+        write_manifest_snapshot(
+            artifacts=artifacts,
+            video_jobs=video_jobs,
+            model_name=model_config.model_name,
+            resolution=resolution,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            keep_remote_media=keep_remote_media,
+            results_payload=results_payload,
+        )
 
     return artifacts
