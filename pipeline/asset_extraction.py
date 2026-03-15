@@ -131,44 +131,54 @@ def normalize_asset_registry_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def create_script_clean_payload(script_path: Path, normalized_text: str) -> dict[str, Any]:
+def create_script_clean_payload(
+    *,
+    source_script_name: str,
+    normalized_text: str,
+    source_path: Path | None = None,
+) -> dict[str, Any]:
     paragraphs = normalized_text.split("\n\n") if normalized_text else []
     return {
-        "source_path": str(script_path.resolve()),
-        "source_script_name": script_path.stem,
+        "source_path": str(source_path.resolve()) if source_path is not None else "",
+        "source_script_name": source_script_name,
         "character_count": len(normalized_text),
         "paragraph_count": len(paragraphs),
         "text": normalized_text,
     }
 
 
-def extract_asset_registry(
+def extract_asset_registry_from_text(
     *,
-    script_path: Path,
+    source_script_name: str,
+    script_text: str,
     model_config: TextModelConfig,
     output_root: Path,
     run_dir: Path | None = None,
     dry_run: bool = False,
+    source_path: Path | None = None,
 ) -> AssetExtractionArtifacts:
-    raw_text = script_path.read_text(encoding="utf-8")
-    normalized_text = normalize_script_text(raw_text)
+    normalized_text = normalize_script_text(script_text)
     if not normalized_text:
-        raise ValueError(f"Script file is empty after normalization: {script_path}")
+        raise ValueError("Script text is empty after normalization")
 
     artifacts = build_existing_run_artifacts(run_dir) if run_dir is not None else build_run_artifacts(output_root)
-    script_clean_payload = create_script_clean_payload(script_path, normalized_text)
+    script_clean_payload = create_script_clean_payload(
+        source_script_name=source_script_name,
+        normalized_text=normalized_text,
+        source_path=source_path,
+    )
     script_clean_text_path = artifacts.input_dir / "script_clean.txt"
     script_clean_json_path = artifacts.input_dir / "script_clean.json"
     script_clean_text_path.write_text(normalized_text, encoding="utf-8")
     write_json(script_clean_json_path, script_clean_payload)
 
-    user_prompt = build_asset_extraction_user_prompt(script_path.stem, normalized_text)
+    user_prompt = build_asset_extraction_user_prompt(source_script_name, normalized_text)
     request_payload = {
         "model": model_config.model_name,
         "base_url": model_config.base_url,
         "system_prompt": ASSET_EXTRACTION_SYSTEM_PROMPT,
         "user_prompt": user_prompt,
-        "source_script_name": script_path.stem,
+        "source_script_name": source_script_name,
     }
     request_path = artifacts.asset_dir / "asset_extraction_request.json"
     write_json(request_path, request_payload)
@@ -197,3 +207,23 @@ def extract_asset_registry(
     write_json(registry_path, registry.model_dump(mode="json"))
 
     return artifacts
+
+
+def extract_asset_registry(
+    *,
+    script_path: Path,
+    model_config: TextModelConfig,
+    output_root: Path,
+    run_dir: Path | None = None,
+    dry_run: bool = False,
+) -> AssetExtractionArtifacts:
+    raw_text = script_path.read_text(encoding="utf-8")
+    return extract_asset_registry_from_text(
+        source_script_name=script_path.stem,
+        script_text=raw_text,
+        model_config=model_config,
+        output_root=output_root,
+        run_dir=run_dir,
+        dry_run=dry_run,
+        source_path=script_path,
+    )

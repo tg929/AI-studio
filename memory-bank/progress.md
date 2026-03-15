@@ -114,6 +114,18 @@ Last updated: 2026-03-15
   - `trim_leading_seconds = 1.6`
   - `blackout_leading_seconds = 0.4`
   - sampled processed shots now start on pure black and return to normal content after the blackout window
+- Implemented the first optional upstream `intent_to_script` node for short-input expansion:
+  - `intent_packet.json`
+  - `story_blueprint.json`
+  - `generated_script.txt`
+  - `script_quality_report.json`
+  - normalized handoff into `01_input/script_clean.txt`
+- Added a new CLI entrypoint `generate_script_from_intent.py`.
+- Refactored `pipeline/asset_extraction.py` so asset extraction can now run from direct script text, not only from a source file path.
+- Verified the new intent-to-script CLI in dry-run mode under `runs/run11`:
+  - `00_source/source_input.txt`
+  - `00_source/source_context.json`
+  - `00_source/intent_packet_request.json`
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -140,12 +152,17 @@ The project now has:
 - one working Python jsDelivr publishing helper
 - one working Python shot-video execution node
 - one working Python final-video concat node
+- one working Python intent-to-script upstream node
 - project memory-bank setup
 
 ## Next Step
 
-- Review the generated final full video for `run10`
-- Then start the simple UI layer on top of the completed run artifacts
+- Run the first real intent-to-script sample from keywords / brief and review:
+  - `intent_packet.json`
+  - `story_blueprint.json`
+  - `generated_script.txt`
+  - `script_quality_report.json`
+- Then decide whether to add an automatic repair loop before asset extraction or keep the first version human-reviewed
 
 ## Known Constraints
 
@@ -163,6 +180,13 @@ The project now has:
 - `agentkit.local.yaml` contains local model settings and must remain uncommitted.
 - `BigBanana-AI-Director-main-2/` is gitignored here and used only as a local reference copy.
 - The current text model does not support `response_format={"type":"json_object"}`.
+- The new intent-to-script path currently has four text stages:
+  - intent understanding
+  - story blueprint
+  - script generation
+  - script quality review
+- The first verification for the new intent-to-script path is a dry run only; the first real sample generation is still pending.
+- If the new intent-to-script node resolves the source input mode to `script`, it currently reuses the normalized source text instead of rewriting it.
 - The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
 - The style-bible node uses the same prompt-constrained JSON + local schema validation path.
 - The asset-prompts node uses the same prompt-constrained JSON + local schema validation path.

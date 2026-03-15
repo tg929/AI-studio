@@ -4,7 +4,12 @@
 
 This project builds a script-to-video workflow using Volcano Engine models through a Python AgentKit application.
 
-The system takes a script as input and produces:
+The system currently supports two upstream input modes:
+
+- a full script
+- a short intent input such as keywords or a brief, which can first be expanded into a full script
+
+From a full script, the system produces:
 
 - structured assets
 - labeled asset images
@@ -25,21 +30,25 @@ Current baseline:
 
 ## Product Flow
 
-1. Script preprocessing
-2. Asset extraction
-3. Art direction generation
-4. Asset visual prompt generation
-5. Asset image generation
-6. Storyboard generation
-7. Shot reference board stitching
-8. Shot video generation
-9. Final video concatenation
+1. Optional intent understanding
+2. Optional story blueprint generation
+3. Optional intent-to-script generation
+4. Script preprocessing
+5. Asset extraction
+6. Art direction generation
+7. Asset visual prompt generation
+8. Asset image generation
+9. Storyboard generation
+10. Shot reference board stitching
+11. Shot video generation
+12. Final video concatenation
 
 ## Core Constraints
 
 - Python implementation
 - AgentKit / VeADK workflow
 - Volcano Engine text, image, and video models
+- The current short-intent expansion target is a roughly `60s`, `6-shot` micro-script before it enters the existing downstream flow
 - Shot duration fixed at 10 seconds
 - Asset images must include labels
 - Video model gets one stitched board image plus one shot prompt

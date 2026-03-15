@@ -15,6 +15,28 @@ Validation:
 
 - `smoke_test_models.py` succeeds for text, image, and video.
 
+## Step 0.5: Intent-to-Script Upstream Expansion
+
+Status: in progress
+
+Goal:
+
+- Accept keywords, a short brief, or a full script as upstream source input.
+- Convert short input into a production-ready full script before the existing asset-extraction flow.
+
+Outputs:
+
+- `00_source/intent_packet.json`
+- `00_source/story_blueprint.json`
+- `00_source/generated_script.txt`
+- `00_source/script_quality_report.json`
+- `01_input/script_clean.txt`
+
+Validation:
+
+- Dry run writes `00_source/source_input.txt`, `00_source/source_context.json`, and the first-stage request payload.
+- A full run should produce validated JSON artifacts plus a usable generated script under the same run directory.
+
 ## Step 1: Asset Schema and Asset Extraction Prompt
 
 Status: done

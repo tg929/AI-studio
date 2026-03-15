@@ -24,9 +24,57 @@ Ideas we should not copy directly:
 - The "no text in generated board image" rule
 - Any assumption that production implementation should mirror the reference repo structure
 
-## Four Major Prompt Families for This Project
+## Current Prompt Families for This Project
 
-### 1. Asset Extraction Prompt
+### 1. Intent Understanding Prompt
+
+Purpose:
+
+- Convert keywords or a short brief into a structured `intent_packet.json`.
+
+Required behavior:
+
+- Output valid JSON only
+- Preserve the user's stated intent and separate it from assumptions
+- Lock the short-form target spec before story expansion
+
+### 2. Story Blueprint Prompt
+
+Purpose:
+
+- Convert `intent_packet.json` into a constrained `story_blueprint.json`.
+
+Required behavior:
+
+- Output valid JSON only
+- Keep character / scene / prop counts controlled
+- Produce a beat sheet that is asset-friendly and storyboard-friendly
+
+### 3. Script Generation Prompt
+
+Purpose:
+
+- Convert `intent_packet.json + story_blueprint.json` into a full script that downstream asset extraction can use directly.
+
+Required behavior:
+
+- Output plain script text only
+- Stay visually concrete enough for asset extraction
+- Preserve the blueprint's role / scene / prop constraints
+
+### 4. Script Quality Prompt
+
+Purpose:
+
+- Review the generated script before it enters the expensive downstream stages.
+
+Required behavior:
+
+- Output valid JSON only
+- Check whether the script stays within the short-form production envelope
+- Surface repair instructions instead of silently letting weak scripts continue
+
+### 5. Asset Extraction Prompt
 
 Purpose:
 
@@ -38,7 +86,7 @@ Required behavior:
 - No creative expansion beyond the script unless explicitly needed
 - Deduplicate recurring assets
 
-### 2. Asset Image Prompt
+### 6. Asset Image Prompt
 
 Purpose:
 
@@ -50,7 +98,7 @@ Required behavior:
 - Produce prompts separately for character, scene, and prop assets
 - Respect the project's labeled asset format
 
-### 3. Storyboard Prompt
+### 7. Storyboard Prompt
 
 Purpose:
 
@@ -62,7 +110,7 @@ Required behavior:
 - Each shot must reference existing asset IDs
 - Each shot has one prompt suitable for video generation
 
-### 4. Video Prompt
+### 8. Video Prompt
 
 Purpose:
 
@@ -77,6 +125,7 @@ Required behavior:
 
 ## Current Project-Specific Prompt Constraints
 
+- The short-intent upstream path should converge to a roughly `60s`, `6-shot` micro-script before entering asset extraction.
 - Asset images are labeled.
 - Shot duration is fixed at 10 seconds.
 - The stitched board contains only the assets used in that shot.

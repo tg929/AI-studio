@@ -23,6 +23,15 @@ Current role:
 - CLI entrypoint for the first workflow node
 - Runs script preprocessing and asset extraction
 
+### `generate_script_from_intent.py`
+
+Current role:
+
+- CLI entrypoint for the new optional upstream intent-to-script node
+- Accepts keywords, a brief, or a full script
+- Generates `00_source/*` artifacts and writes a normalized `01_input/script_clean.txt`
+- Can optionally continue into asset extraction in the same run directory
+
 ### `pipeline/runtime.py`
 
 Current role:
@@ -45,10 +54,23 @@ Current role:
 
 - Normalizes script text
 - Writes input artifacts
+- Supports both file-based script input and direct in-memory script text input
 - Calls the text model
 - Normalizes observed model field aliases
 - Validates the result against the asset schema
 - Writes `asset_registry.json`
+
+### `pipeline/intent_to_script.py`
+
+Current role:
+
+- Builds the new `00_source/` upstream stage
+- Writes `source_input.txt` and `source_context.json`
+- Generates `intent_packet.json`
+- Generates `story_blueprint.json`
+- Generates `generated_script.txt`
+- Generates `script_quality_report.json`
+- Writes the generated script into `01_input/script_clean.txt` for downstream reuse
 
 ### `generate_style_bible.py`
 
@@ -253,6 +275,27 @@ Current role:
 
 - Defines the strict Pydantic schema for `style_bible.json`
 - Validates the global visual-style contract for downstream prompt generation
+
+### `schemas/intent_packet.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `intent_packet.json`
+- Locks input mode, story intent, target spec, assumptions, and ambiguities
+
+### `schemas/story_blueprint.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `story_blueprint.json`
+- Enforces controlled character / scene / prop counts plus beat-sheet integrity
+
+### `schemas/script_quality.py`
+
+Current role:
+
+- Defines the strict Pydantic schema for `script_quality_report.json`
+- Validates hard-check aggregation and repair metadata before downstream handoff
 
 ### `schemas/asset_prompts.py`
 
