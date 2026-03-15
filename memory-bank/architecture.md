@@ -62,6 +62,16 @@ Current role:
 - Writes a normalized `01_input/script_clean.txt` when a script candidate is available
 - Can optionally continue into asset extraction in the same run directory
 
+### `run_workflow.py`
+
+Current role:
+
+- Unified local CLI entrypoint for the current script-to-video workflow
+- Supports both fresh-input execution and resume-from-`runN` execution
+- Skips already completed stages by checking canonical artifact paths
+- Runs board publishing via TOS when configured, otherwise falls back to GitHub + jsDelivr
+- Stops with an explicit commit/push requirement when jsDelivr URLs are still not public
+
 ### `pipeline/runtime.py`
 
 Current role:

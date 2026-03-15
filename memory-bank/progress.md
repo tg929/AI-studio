@@ -278,6 +278,11 @@ The project now has:
   - otherwise the workflow now falls back to the existing GitHub + jsDelivr publish path
   - the fallback copies board PNGs into `static/runs/...`, updates `shot_reference_manifest.json`, and checks whether the public CDN URL is already reachable
   - if jsDelivr still returns `404`, the workflow now blocks with the correct next action: commit and push the generated `static/runs/...` files
+- Added `run_workflow.py` as a unified local terminal entrypoint for the current workflow:
+  - supports fresh input via `--input` or `--text`
+  - supports resume via `--run-dir`
+  - skips completed stages automatically
+  - mirrors the current publish behavior: TOS first, then GitHub + jsDelivr fallback
 - Reworked shot-board composition so asset completeness now takes priority over forced cell fill:
   - `grid_1x1`, `grid_2x1`, `grid_2x2`, and `grid_3x2` now use adaptive row layouts
   - all shot-board assets are rendered with full-image containment instead of default `cover` cropping

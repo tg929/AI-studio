@@ -29,6 +29,7 @@ Current baseline:
 - The current final output is `runs/run10/10_final/final_video.mp4`.
 - Final stitching now supports both leading trim and a short leading black-screen cover on every shot so residual first-frame board frames can be hidden deterministically.
 - The current interactive runtime direction is `veadk web`, using a dedicated `ai_studio_flow` agent package instead of building a custom UI first.
+- The project now also has a unified local CLI entrypoint `run_workflow.py` for terminal-based end-to-end execution and resume.
 
 ## Default Input
 
