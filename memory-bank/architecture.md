@@ -222,7 +222,8 @@ Current role:
 - Chooses a fixed grid template from asset count
 - Trims uniform outer borders from raw asset reference images before placement
 - Uses edge-to-edge grid cells plus cover-fit composition so each occupied slot fills its assigned area
-- Renders a consistent local black label bar inside each occupied slot instead of reusing the padded labeled-card bitmap directly
+- Reserves a dedicated bottom label area per occupied slot so labels do not occlude the rendered reference imagery
+- Renders a consistent local black label bar from clean text instead of reusing the padded labeled-card bitmap directly
 - Renders one PNG stitched board per shot using local image composition only
 - Writes `shot_reference_manifest.json`
 

@@ -29,7 +29,7 @@ LABEL_SIDE_PADDING_PX = 24
 LABEL_FONT_MIN_SIZE = 18
 LABEL_FONT_DIVISOR = 3
 BORDER_ACTIVITY_STD_THRESHOLD = 14.0
-TRIM_BACKOFF_PX = 8
+TRIM_BACKOFF_PX = 2
 MAX_VERTICAL_TRIM_RATIO = 0.12
 MAX_HORIZONTAL_TRIM_RATIO = 0.08
 
@@ -288,24 +288,40 @@ def resize_cover(image: Image.Image, target_width: int, target_height: int) -> I
     return resized.crop((crop_left, crop_top, crop_right, crop_bottom))
 
 
-def render_slot_label(
-    *,
-    draw: ImageDraw.ImageDraw,
-    font_path: Path,
-    box: dict[str, int],
-    label_text: str,
-) -> None:
+def split_slot_box(box: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
     label_height = max(
         LABEL_BAR_MIN_HEIGHT_PX,
         min(LABEL_BAR_MAX_HEIGHT_PX, int(box["height"] * LABEL_BAR_HEIGHT_RATIO)),
     )
-    label_top = int(box["y"]) + int(box["height"]) - label_height
+    image_height = max(1, int(box["height"]) - label_height)
+    image_box = {
+        "x": int(box["x"]),
+        "y": int(box["y"]),
+        "width": int(box["width"]),
+        "height": image_height,
+    }
+    label_box = {
+        "x": int(box["x"]),
+        "y": int(box["y"]) + image_height,
+        "width": int(box["width"]),
+        "height": label_height,
+    }
+    return image_box, label_box
+
+
+def render_slot_label(
+    *,
+    draw: ImageDraw.ImageDraw,
+    font_path: Path,
+    label_box: dict[str, int],
+    label_text: str,
+) -> None:
     draw.rectangle(
         (
-            int(box["x"]),
-            label_top,
-            int(box["x"]) + int(box["width"]),
-            int(box["y"]) + int(box["height"]),
+            int(label_box["x"]),
+            int(label_box["y"]),
+            int(label_box["x"]) + int(label_box["width"]),
+            int(label_box["y"]) + int(label_box["height"]),
         ),
         fill=LABEL_BAR_FILL,
     )
@@ -314,12 +330,12 @@ def render_slot_label(
         draw,
         label_text,
         font_path,
-        max_width=int(box["width"]) - 2 * LABEL_SIDE_PADDING_PX,
-        font_size=max(LABEL_FONT_MIN_SIZE, label_height // LABEL_FONT_DIVISOR),
+        max_width=int(label_box["width"]) - 2 * LABEL_SIDE_PADDING_PX,
+        font_size=max(LABEL_FONT_MIN_SIZE, int(label_box["height"]) // LABEL_FONT_DIVISOR),
     )
     left, top, right, bottom = draw.textbbox((0, 0), label_text, font=font)
-    text_x = int(box["x"]) + (int(box["width"]) - (right - left)) // 2
-    text_y = label_top + (label_height - (bottom - top)) // 2 - top
+    text_x = int(label_box["x"]) + (int(label_box["width"]) - (right - left)) // 2
+    text_y = int(label_box["y"]) + (int(label_box["height"]) - (bottom - top)) // 2 - top
     draw.text((text_x, text_y), label_text, fill=LABEL_TEXT_FILL, font=font)
 
 
@@ -332,14 +348,13 @@ def render_board_image(slots: list[dict[str, object]], output_path: Path) -> Non
         source_image_path = Path(str(slot["source_image_path"]))
         image = trim_uniform_border(Image.open(source_image_path).convert("RGB"))
         box = slot["target_box"]
-        box_width = int(box["width"])
-        box_height = int(box["height"])
-        resized = resize_cover(image, box_width, box_height)
-        canvas.paste(resized, (int(box["x"]), int(box["y"])))
+        image_box, label_box = split_slot_box(box)
+        resized = resize_cover(image, image_box["width"], image_box["height"])
+        canvas.paste(resized, (image_box["x"], image_box["y"]))
         render_slot_label(
             draw=draw,
             font_path=font_path,
-            box=box,
+            label_box=label_box,
             label_text=str(slot["label_text"]),
         )
 

@@ -312,6 +312,7 @@ The project now has:
 - `run12` shot reference boards were regenerated after the layout tightening pass:
   - `07_shot_reference_boards/boards/*.png` now use zero outer padding and zero gutter
   - occupied cells now fill their quarter/half-grid areas much more tightly than the previous `contain` layout
+  - slot labels now use reserved bottom bands instead of overlaying the imagery, which removed the visible occlusion in `shot_012`
   - `08_video_jobs/video_jobs.json` still validates afterward and remains blocked only by missing public `board_public_url` values
 - `run12` has now also been republished into the repo-local `static/` tree with jsDelivr URL placeholders:
   - `runs/run12/07_shot_reference_boards/board_publish_result.json` points at `https://cdn.jsdelivr.net/gh/tg929/AI-studio@main/static/runs/run12/...`
