@@ -142,6 +142,13 @@ def create_api_app(
             raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
         return {"run_id": run_id, "events": workflow_service.read_events(run_dir, limit=limit)}
 
+    @app.get("/api/runs/{run_id}/videos")
+    def get_run_videos(run_id: str) -> dict[str, Any]:
+        run_dir = workflow_service.output_root / run_id
+        if not run_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        return workflow_service.build_video_payload(run_dir)
+
     @app.get("/api/runs/{run_id}/tasks")
     def get_run_tasks(run_id: str, limit: int = 20) -> dict[str, Any]:
         return {"run_id": run_id, "tasks": runner.list_tasks(run_id=run_id, limit=limit)}

@@ -512,6 +512,56 @@ def build_console_html() -> str:
       display: grid;
       gap: 4px;
     }
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .video-card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+      overflow: hidden;
+      display: grid;
+    }
+    .video-card .media-thumb,
+    .video-card video {
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      display: block;
+      background: rgba(88, 97, 92, 0.08);
+      object-fit: cover;
+    }
+    .video-body {
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+    .video-hero {
+      display: grid;
+      gap: 14px;
+    }
+    .video-frame {
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(30, 34, 32, 0.04);
+    }
+    .video-frame video,
+    .video-frame img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: block;
+      object-fit: cover;
+      background: rgba(88, 97, 92, 0.08);
+    }
+    .video-filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
     .micro-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -810,9 +860,11 @@ def build_console_html() -> str:
     let selectedRunId = '';
     let assetReviewCache = null;
     let storyboardReviewCache = null;
+    let videoSummaryCache = null;
     let assetImageFilter = 'all';
     let assetImageQuery = '';
     let storyboardSelectedShotId = '';
+    let shotVideoFilter = 'all';
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -1216,6 +1268,119 @@ def build_console_html() -> str:
       paintStoryboardReview();
     }
 
+    function setShotVideoFilter(filter) {
+      shotVideoFilter = filter;
+      paintShotVideosSection();
+    }
+
+    function renderFinalVideoPanel(videoPayload) {
+      const finalVideo = videoPayload?.final_video || {};
+      const summary = videoPayload?.summary || {};
+      const summaryHtml = `
+        <div class="summary-grid">
+          ${renderSummaryBox('shot_count', finalVideo.shot_count || summary.total_shots || 0)}
+          ${renderSummaryBox('trim_leading_seconds', finalVideo.trim_leading_seconds ?? 'N/A')}
+          ${renderSummaryBox('blackout_leading_seconds', finalVideo.blackout_leading_seconds ?? 'N/A')}
+          ${renderSummaryBox('concat_mode', finalVideo.concat_mode || 'N/A')}
+        </div>
+      `;
+      if (!finalVideo.available || !finalVideo.preview_url) {
+        return `
+          <section class="panel" style="padding:16px">
+            <h2>Final Video</h2>
+            ${summaryHtml}
+            <div class="empty" style="margin-top:14px">最终拼接视频还不存在，完成 final_video stage 后会显示在这里。</div>
+          </section>
+        `;
+      }
+
+      return `
+        <section class="panel" style="padding:16px">
+          <h2>Final Video</h2>
+          <div class="video-hero">
+            ${summaryHtml}
+            <div class="video-frame">
+              <video src="${finalVideo.preview_url}" controls preload="metadata"></video>
+            </div>
+            <div class="media-actions">
+              <button class="text-button" onclick='openMediaModal(${JSON.stringify(finalVideo.preview_url)}, ${JSON.stringify(finalVideo.title || "final video")}, ${JSON.stringify("stitched final output")})'>Inspect Final</button>
+              <a class="text-button" href="${finalVideo.preview_url}" target="_blank" rel="noopener noreferrer">Open Final File</a>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function paintShotVideosSection() {
+      const root = document.getElementById('shot_videos_section_dynamic');
+      const filterRoot = document.getElementById('shot_videos_filter_row');
+      const metaRoot = document.getElementById('shot_videos_filter_meta');
+      if (!root || !filterRoot || !metaRoot) return;
+
+      const shotVideos = videoSummaryCache?.shot_videos || [];
+      const statusCounts = shotVideos.reduce((acc, item) => {
+        const key = item.status || 'unknown';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+      const filters = ['all', 'succeeded', 'failed', 'timed_out', 'skipped_not_selected', 'skipped_job_not_ready'];
+      filterRoot.innerHTML = filters
+        .filter(item => item === 'all' || statusCounts[item])
+        .map(item => `
+          <button class="chip ${shotVideoFilter === item ? 'active' : ''}" onclick="setShotVideoFilter('${item}')">
+            ${item === 'all' ? 'All' : item} · ${item === 'all' ? shotVideos.length : statusCounts[item]}
+          </button>
+        `)
+        .join('');
+
+      const filtered = shotVideos.filter(item => shotVideoFilter === 'all' || item.status === shotVideoFilter);
+      metaRoot.textContent = `Showing ${filtered.length} / ${shotVideos.length} shot videos`;
+
+      root.innerHTML = filtered.length ? `
+        <div class="video-grid">
+          ${filtered.map(item => `
+            <div class="video-card">
+              ${item.preview_url ? `<video class="media-thumb" src="${item.preview_url}" controls preload="metadata"></video>` : `<div class="media-thumb"></div>`}
+              <div class="video-body">
+                <div class="meta-line">
+                  <strong>${escapeHtml(item.shot_id || 'shot')}</strong>
+                  ${statusTag(item.status)}
+                </div>
+                <div class="muted">order ${escapeHtml(item.order || '')}</div>
+                <div class="muted">segments: ${escapeHtml((item.segment_ids || []).join(', ') || 'N/A')}</div>
+                ${item.error_message ? `<div class="muted">${escapeHtml(item.error_message)}</div>` : ''}
+                <div class="media-actions">
+                  ${item.preview_url ? `<button class="text-button" onclick='openMediaModal(${JSON.stringify(item.preview_url)}, ${JSON.stringify(item.shot_id || "shot video")}, ${JSON.stringify(item.status || "")}, ${JSON.stringify(item.external_url || item.preview_url)})'>Inspect</button>` : ''}
+                  ${item.preview_url ? `<a class="text-button" href="${item.preview_url}" target="_blank" rel="noopener noreferrer">Open Local</a>` : ''}
+                  ${item.external_url ? `<a class="text-button" href="${item.external_url}" target="_blank" rel="noopener noreferrer">Open Remote</a>` : ''}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : '<div class="empty">当前筛选条件下没有分镜视频。</div>';
+    }
+
+    function renderShotVideosPanel(videoPayload) {
+      const summary = videoPayload?.summary || {};
+      return `
+        <section class="panel" style="padding:16px">
+          <h2>Shot Videos</h2>
+          <div class="summary-grid">
+            ${renderSummaryBox('total_shots', summary.total_shots || 0)}
+            ${renderSummaryBox('succeeded_shots', summary.succeeded_shots || 0)}
+            ${renderSummaryBox('failed_or_other', summary.failed_shots || 0)}
+            ${renderSummaryBox('has_final_video', summary.has_final_video ? 'true' : 'false')}
+          </div>
+          <div class="video-filter-bar" style="margin-top:14px">
+            <div id="shot_videos_filter_row" class="chip-row"></div>
+            <div id="shot_videos_filter_meta" class="muted"></div>
+          </div>
+          <div id="shot_videos_section_dynamic" style="margin-top:14px"></div>
+        </section>
+      `;
+    }
+
     async function submitReview(stage, status) {
       if (!selectedRunId) return;
       const reviewer = document.getElementById(`reviewer_${stage}`)?.value || '';
@@ -1255,6 +1420,7 @@ def build_console_html() -> str:
       assetImageFilter = 'all';
       assetImageQuery = '';
       storyboardSelectedShotId = '';
+      shotVideoFilter = 'all';
       await loadRuns();
       await loadRunDetail(runId);
     }
@@ -1282,6 +1448,7 @@ def build_console_html() -> str:
           assetImageFilter = 'all';
           assetImageQuery = '';
           storyboardSelectedShotId = '';
+          shotVideoFilter = 'all';
         }
         await loadRuns();
         if (selectedRunId) {
@@ -1314,11 +1481,12 @@ def build_console_html() -> str:
     }
 
     async function loadRunDetail(runId) {
-      const [runPayload, artifactPayload, eventPayload, taskPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
+      const [runPayload, artifactPayload, eventPayload, taskPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
         api(`/api/runs/${runId}`),
         api(`/api/runs/${runId}/artifacts`),
         api(`/api/runs/${runId}/events?limit=30`),
         api(`/api/runs/${runId}/tasks?limit=12`),
+        safeApi(`/api/runs/${runId}/videos`),
         safeApi(`/api/runs/${runId}/reviews`),
         safeApi(`/api/runs/${runId}/reviews/upstream`),
         safeApi(`/api/runs/${runId}/reviews/asset_images`),
@@ -1390,6 +1558,7 @@ def build_console_html() -> str:
 
       assetReviewCache = assetReview || null;
       storyboardReviewCache = storyboardReview || null;
+      videoSummaryCache = videoPayload || null;
       const storyboardShots = storyboardReviewCache?.payload?.shots || [];
       if (!storyboardShots.some(shot => shot.shot_id === storyboardSelectedShotId)) {
         storyboardSelectedShotId = storyboardShots[0]?.shot_id || '';
@@ -1432,6 +1601,10 @@ def build_console_html() -> str:
           </div>
         </section>
 
+        ${renderFinalVideoPanel(videoSummaryCache)}
+
+        ${renderShotVideosPanel(videoSummaryCache)}
+
         <section class="panel" style="padding:16px">
           <h2>Tasks</h2>
           <div class="task-list">${taskRows}</div>
@@ -1450,6 +1623,7 @@ def build_console_html() -> str:
 
       paintAssetImagesReview();
       paintStoryboardReview();
+      paintShotVideosSection();
     }
 
     async function pollCurrentRun() {

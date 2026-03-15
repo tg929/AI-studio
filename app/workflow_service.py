@@ -1025,6 +1025,104 @@ class WorkflowService:
             }
         return lookup
 
+    def build_video_payload(self, run_dir: Path | str) -> dict[str, Any]:
+        resolved_run_dir = Path(run_dir).resolve()
+        shot_manifest_path = resolved_run_dir / "09_shot_videos" / "shot_videos_manifest.json"
+        final_manifest_path = resolved_run_dir / "10_final" / "final_video_manifest.json"
+        final_video_path = resolved_run_dir / "10_final" / "final_video.mp4"
+
+        final_inputs_by_shot: dict[str, dict[str, Any]] = {}
+        final_payload: dict[str, Any] = {
+            "available": False,
+            "preview_url": "",
+            "local_path": str(final_video_path.resolve()) if final_video_path.exists() else "",
+            "shot_count": 0,
+            "trim_leading_seconds": "",
+            "blackout_leading_seconds": "",
+            "concat_mode": "",
+            "title": "",
+        }
+        if final_manifest_path.exists():
+            final_manifest = read_json(final_manifest_path)
+            if isinstance(final_manifest, dict):
+                manifest_video_path = Path(str(final_manifest.get("final_video_path", "")).strip()) if final_manifest.get("final_video_path") else final_video_path
+                if manifest_video_path.exists():
+                    final_payload["preview_url"] = _preview_url(resolved_run_dir, manifest_video_path)
+                    final_payload["local_path"] = str(manifest_video_path.resolve())
+                    final_payload["available"] = True
+                concat_spec = final_manifest.get("concat_spec", {})
+                if isinstance(concat_spec, dict):
+                    final_payload["trim_leading_seconds"] = concat_spec.get("trim_leading_seconds", "")
+                    final_payload["blackout_leading_seconds"] = concat_spec.get("blackout_leading_seconds", "")
+                    final_payload["concat_mode"] = concat_spec.get("concat_mode", "")
+                final_payload["title"] = str(final_manifest.get("title", "")).strip()
+                inputs = final_manifest.get("inputs", [])
+                if isinstance(inputs, list):
+                    final_payload["shot_count"] = len(inputs)
+                    for item in inputs:
+                        if not isinstance(item, dict):
+                            continue
+                        shot_id = str(item.get("shot_id", "")).strip()
+                        if not shot_id:
+                            continue
+                        trimmed_path = Path(str(item.get("trimmed_video_path", "")).strip()) if item.get("trimmed_video_path") else None
+                        final_inputs_by_shot[shot_id] = {
+                            "trimmed_video_path": str(trimmed_path.resolve()) if trimmed_path and trimmed_path.exists() else str(trimmed_path) if trimmed_path else "",
+                            "trimmed_preview_url": _preview_url(resolved_run_dir, trimmed_path) if trimmed_path and trimmed_path.exists() else "",
+                            "included_in_final": True,
+                        }
+        elif final_video_path.exists():
+            final_payload["available"] = True
+            final_payload["preview_url"] = _preview_url(resolved_run_dir, final_video_path)
+            final_payload["local_path"] = str(final_video_path.resolve())
+
+        shot_results: list[dict[str, Any]] = []
+        status_counts: dict[str, int] = {}
+        if shot_manifest_path.exists():
+            manifest = read_json(shot_manifest_path)
+            results = manifest.get("results", []) if isinstance(manifest, dict) else []
+            for item in results if isinstance(results, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                status = str(item.get("status", "")).strip() or "unknown"
+                status_counts[status] = status_counts.get(status, 0) + 1
+                local_path = Path(str(item.get("video_local_path", "")).strip()) if item.get("video_local_path") else None
+                local_preview_url = _preview_url(resolved_run_dir, local_path) if local_path and local_path.exists() else ""
+                external_url = str(item.get("video_url", "")).strip() or str(item.get("file_url", "")).strip()
+                final_input = final_inputs_by_shot.get(str(item.get("shot_id", "")).strip(), {})
+                shot_results.append(
+                    {
+                        "shot_id": item.get("shot_id", ""),
+                        "order": item.get("order", ""),
+                        "segment_ids": item.get("segment_ids", []),
+                        "status": status,
+                        "task_id": item.get("task_id", ""),
+                        "video_name": item.get("video_name", ""),
+                        "preview_url": local_preview_url or external_url,
+                        "local_preview_url": local_preview_url,
+                        "local_path": str(local_path.resolve()) if local_path and local_path.exists() else str(local_path) if local_path else "",
+                        "external_url": external_url,
+                        "error_message": item.get("error_message", ""),
+                        "included_in_final": bool(final_input.get("included_in_final", False)),
+                        "trimmed_preview_url": final_input.get("trimmed_preview_url", ""),
+                        "trimmed_video_path": final_input.get("trimmed_video_path", ""),
+                    }
+                )
+
+        shot_results.sort(key=lambda item: int(item.get("order") or 0))
+        return {
+            "run_id": resolved_run_dir.name,
+            "summary": {
+                "total_shots": len(shot_results),
+                "succeeded_shots": status_counts.get("succeeded", 0),
+                "failed_shots": sum(count for status, count in status_counts.items() if status not in {"succeeded"}),
+                "status_counts": status_counts,
+                "has_final_video": final_payload["available"],
+            },
+            "shot_videos": shot_results,
+            "final_video": final_payload,
+        }
+
     def list_reviews(self, run_dir: Path | str) -> dict[str, Any]:
         resolved_run_dir = Path(run_dir).resolve()
         reviews = ensure_reviews(resolved_run_dir)

@@ -182,6 +182,7 @@ Last updated: 2026-03-16
   - prop sheets still drift toward mannequin / torso-display interpretations
   - scene sheets still drift toward presentation-board framing and may still include human figures
   - prompt-only tuning is helping most on characters and much less on scenes / props
+- Added a standalone `workflow_overview.html` page that visualizes the current code-level pipeline from upstream routing through final video concatenation in a reference-diagram style.
 
 ## Current Phase
 
@@ -214,6 +215,7 @@ The project now has:
 - one first local operator-console UI shell under `app/ui.py`
 - one working fresh end-to-end intent-to-video sample under `runs/run13`
 - project memory-bank setup
+- one standalone HTML workflow overview page
 
 ## Next Step
 

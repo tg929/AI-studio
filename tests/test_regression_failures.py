@@ -222,5 +222,38 @@ class WorkflowReviewPayloadTests(unittest.TestCase):
         self.assertEqual(shot_002["board_layout_template"], "grid_2x1")
 
 
+class WorkflowVideoPayloadTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        config_stub = SimpleNamespace(model_name="stub-model", base_url="http://example.invalid")
+        cls._patches = [
+            mock.patch("app.workflow_service.load_text_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_image_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_video_model_config", return_value=config_stub),
+        ]
+        for patcher in cls._patches:
+            patcher.start()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for patcher in reversed(cls._patches):
+            patcher.stop()
+
+    def test_video_payload_includes_shot_videos_and_final_video(self) -> None:
+        service = WorkflowService(output_root=PROJECT_ROOT / "runs", env_file=None)
+
+        payload = service.build_video_payload(PROJECT_ROOT / "runs" / "run14")
+
+        self.assertEqual(payload["summary"]["total_shots"], 7)
+        self.assertEqual(payload["summary"]["succeeded_shots"], 7)
+        self.assertTrue(payload["summary"]["has_final_video"])
+        self.assertTrue(payload["final_video"]["preview_url"])
+        self.assertEqual(payload["final_video"]["shot_count"], 7)
+        shot_001 = next(item for item in payload["shot_videos"] if item["shot_id"] == "shot_001")
+        self.assertEqual(shot_001["status"], "succeeded")
+        self.assertTrue(shot_001["preview_url"])
+        self.assertTrue(shot_001["included_in_final"])
+
+
 if __name__ == "__main__":
     unittest.main()

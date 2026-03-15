@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Studio 项目整体流程图</title>
+    <style>
+      :root {
+        --page-bg: #f4f3ef;
+        --panel-bg: rgba(255, 255, 255, 0.82);
+        --panel-border: #d8d7d3;
+        --ink: #141414;
+        --muted: #66645f;
+        --line: #1f1f1f;
+        --white: #ffffff;
+        --shadow: 0 14px 36px rgba(20, 20, 20, 0.08);
+        --node-shadow: 0 10px 20px rgba(20, 20, 20, 0.08);
+        --radius-xl: 28px;
+        --radius-lg: 22px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background-color: var(--page-bg);
+        background-image:
+          radial-gradient(circle at 1px 1px, rgba(20, 20, 20, 0.16) 1.35px, transparent 0),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.05));
+        background-size: 34px 34px, 100% 100%;
+      }
+
+      .workflow-page {
+        position: relative;
+        width: min(1420px, calc(100vw - 28px));
+        margin: 0 auto;
+        padding: 34px 0 52px;
+      }
+
+      .workflow-lines {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .hero {
+        position: relative;
+        z-index: 2;
+        margin-bottom: 22px;
+        padding: 0 10px;
+      }
+
+      .hero__eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 10px;
+        padding: 7px 12px;
+        border: 1px solid #cfcfc9;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+
+      .hero__title {
+        margin: 0 0 10px;
+        font-size: clamp(30px, 4.2vw, 52px);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      .hero__desc {
+        max-width: 940px;
+        margin: 0 0 12px;
+        font-size: 16px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .hero__source {
+        margin: 0;
+        font-size: 13px;
+        color: #75726b;
+      }
+
+      .phase {
+        position: relative;
+        z-index: 2;
+        margin-top: 26px;
+      }
+
+      .phase__tag {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 12px;
+        margin-bottom: 12px;
+        padding: 8px 14px;
+        border: 1px solid #d0d0ca;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 6px 14px rgba(20, 20, 20, 0.05);
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+      }
+
+      .phase__panel {
+        position: relative;
+        z-index: 2;
+        border: 2px solid var(--panel-border);
+        border-radius: var(--radius-xl);
+        background: var(--panel-bg);
+        box-shadow: var(--shadow);
+        padding: 48px 40px;
+      }
+
+      .phase__grid {
+        display: grid;
+        gap: 28px 26px;
+        align-items: center;
+        position: relative;
+        z-index: 2;
+      }
+
+      .phase--upstream .phase__grid {
+        grid-template-columns: 1.08fr 1.1fr 1.15fr 1.08fr 1.08fr 1.12fr 1.14fr;
+        grid-template-rows: repeat(3, minmax(108px, auto));
+      }
+
+      .phase--production .phase__grid {
+        grid-template-columns: 1.04fr 1.12fr 1.2fr 1.04fr 1.04fr 1.16fr;
+        grid-template-rows: repeat(3, minmax(108px, auto));
+      }
+
+      .phase--post .phase__grid {
+        grid-template-columns: 1.12fr 1.02fr 1.02fr 1.02fr 1.18fr;
+        grid-template-rows: repeat(3, minmax(108px, auto));
+      }
+
+      .node {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 108px;
+        padding: 18px 22px;
+        border: 3px solid var(--ink);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--node-shadow);
+        text-align: center;
+      }
+
+      .node--main {
+        background: #050505;
+        color: var(--white);
+      }
+
+      .node--detail {
+        background: var(--white);
+        color: var(--ink);
+      }
+
+      .node--optional {
+        border-style: dashed;
+        background: rgba(255, 255, 255, 0.94);
+      }
+
+      .node__title {
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.03em;
+      }
+
+      .node__sub {
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.45;
+        font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+        opacity: 0.82;
+      }
+
+      .node--detail .node__title,
+      .node--optional .node__title {
+        font-size: 22px;
+      }
+
+      .node:hover {
+        transform: translateY(-2px);
+        transition: transform 160ms ease, box-shadow 160ms ease;
+        box-shadow: 0 16px 30px rgba(20, 20, 20, 0.12);
+      }
+
+      #node-input {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      #node-intent {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      #node-router {
+        grid-column: 3;
+        grid-row: 1;
+      }
+
+      #node-script {
+        grid-column: 3;
+        grid-row: 2;
+      }
+
+      #node-readiness {
+        grid-column: 3;
+        grid-row: 3;
+      }
+
+      #node-extract {
+        grid-column: 4;
+        grid-row: 2;
+      }
+
+      #node-asset-generate {
+        grid-column: 5;
+        grid-row: 2;
+      }
+
+      #node-style {
+        grid-column: 6;
+        grid-row: 1;
+      }
+
+      #node-prompts {
+        grid-column: 6;
+        grid-row: 3;
+      }
+
+      #node-reference-assets {
+        grid-column: 7;
+        grid-row: 2;
+      }
+
+      #node-storyboard-seed {
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      #node-storyboard {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      #node-board-stitch {
+        grid-column: 3;
+        grid-row: 2;
+      }
+
+      #node-board-publish {
+        grid-column: 4;
+        grid-row: 1;
+      }
+
+      #node-video-jobs {
+        grid-column: 4;
+        grid-row: 3;
+      }
+
+      #node-video-generate {
+        grid-column: 6;
+        grid-row: 2;
+      }
+
+      #node-shot-collect {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      #node-trim {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      #node-blackout {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      #node-concat-list {
+        grid-column: 2;
+        grid-row: 3;
+      }
+
+      #node-final-compose {
+        grid-column: 5;
+        grid-row: 2;
+      }
+
+      .phase__note {
+        display: inline-flex;
+        margin-top: 18px;
+        padding: 10px 14px;
+        border: 1px solid #d6d6cf;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.82);
+        font-size: 13px;
+        color: #6b675f;
+      }
+
+      .footer-note {
+        position: relative;
+        z-index: 2;
+        margin-top: 24px;
+        padding: 18px 20px;
+        border: 1px solid #d6d5cf;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.78);
+        font-size: 14px;
+        line-height: 1.65;
+        color: #5f5b53;
+      }
+
+      .footer-note code,
+      .hero__source code {
+        font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+        font-size: 0.94em;
+      }
+
+      @media (max-width: 1180px) {
+        .phase__panel {
+          padding: 34px 24px;
+        }
+
+        .node__title {
+          font-size: 22px;
+        }
+
+        .node--detail .node__title,
+        .node--optional .node__title {
+          font-size: 20px;
+        }
+      }
+
+      @media (max-width: 960px) {
+        .workflow-page {
+          width: min(780px, calc(100vw - 18px));
+          padding-top: 24px;
+        }
+
+        .phase--upstream .phase__grid,
+        .phase--production .phase__grid,
+        .phase--post .phase__grid {
+          grid-template-columns: 1fr;
+          grid-template-rows: none;
+        }
+
+        .phase__grid > .node {
+          grid-column: 1 !important;
+          grid-row: auto !important;
+        }
+
+        .phase__panel {
+          padding: 24px 18px;
+        }
+
+        .phase__tag {
+          margin-left: 6px;
+          font-size: 17px;
+        }
+
+        .node {
+          min-height: 94px;
+          padding: 16px 18px;
+        }
+
+        .node__title {
+          font-size: 21px;
+        }
+
+        .node__sub {
+          font-size: 11px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="workflow-page" id="workflow-page">
+      <svg class="workflow-lines" id="workflow-lines" aria-hidden="true">
+        <defs>
+          <marker
+            id="arrowhead"
+            viewBox="0 0 10 10"
+            refX="8.4"
+            refY="5"
+            markerWidth="8"
+            markerHeight="8"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f1f1f"></path>
+          </marker>
+        </defs>
+        <g id="workflow-paths"></g>
+      </svg>
+
+      <header class="hero">
+        <p class="hero__eyebrow">AI STUDIO WORKFLOW</p>
+        <h1 class="hero__title">项目整体流程图</h1>
+        <p class="hero__desc">
+          基于当前仓库的真实编排生成：上游由 <code>intent_to_script</code> 路由与资产就绪检查控制，
+          中段完成资产提取与参考资产图生产，后段按 “分镜绑定资产 → 首帧图拼接 → 视频生成 → 视频合成” 推进。
+        </p>
+        <p class="hero__source">
+          实际依据：
+          <code>app/workflow_service.py</code>
+          ·
+          <code>run_workflow.py</code>
+          ·
+          <code>pipeline/intent_to_script.py</code>
+          ·
+          <code>pipeline/storyboard.py</code>
+          ·
+          <code>pipeline/shot_reference_boards.py</code>
+          ·
+          <code>pipeline/shot_videos.py</code>
+          ·
+          <code>pipeline/final_video.py</code>
+        </p>
+      </header>
+
+      <section class="phase phase--upstream">
+        <div class="phase__tag">上游</div>
+        <div class="phase__panel">
+          <div class="phase__grid">
+            <div class="node node--main" id="node-input">
+              <div class="node__title">输入接入</div>
+              <div class="node__sub">keywords / brief / script</div>
+            </div>
+
+            <div class="node node--main" id="node-intent">
+              <div class="node__title">意图识别</div>
+              <div class="node__sub">00_source/intake_router.json</div>
+            </div>
+
+            <div class="node node--detail" id="node-router">
+              <div class="node__title">输入路由</div>
+              <div class="node__sub">expand / compress / rewrite / direct_extract</div>
+            </div>
+
+            <div class="node node--detail" id="node-script">
+              <div class="node__title">意图包 / 故事蓝图<br />剧本生成</div>
+              <div class="node__sub">intent_packet · story_blueprint · generated_script</div>
+            </div>
+
+            <div class="node node--detail" id="node-readiness">
+              <div class="node__title">资产就绪检查</div>
+              <div class="node__sub">asset_readiness_report.json</div>
+            </div>
+
+            <div class="node node--main" id="node-extract">
+              <div class="node__title">资产提取</div>
+              <div class="node__sub">02_assets/asset_registry.json</div>
+            </div>
+
+            <div class="node node--main" id="node-asset-generate">
+              <div class="node__title">资产生成</div>
+              <div class="node__sub">style + prompts + image render</div>
+            </div>
+
+            <div class="node node--detail" id="node-style">
+              <div class="node__title">风格圣经</div>
+              <div class="node__sub">03_style/style_bible.json</div>
+            </div>
+
+            <div class="node node--detail" id="node-prompts">
+              <div class="node__title">资产提示词</div>
+              <div class="node__sub">04_asset_prompts/asset_prompts.json</div>
+            </div>
+
+            <div class="node node--main" id="node-reference-assets">
+              <div class="node__title">参考资产图</div>
+              <div class="node__sub">05_asset_images/asset_images_manifest.json</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase phase--production">
+        <div class="phase__tag">中游</div>
+        <div class="phase__panel">
+          <div class="phase__grid">
+            <div class="node node--optional" id="node-storyboard-seed">
+              <div class="node__title">预分镜 Seed</div>
+              <div class="node__sub">可选并行 · 00_source/storyboard_seed.json</div>
+            </div>
+
+            <div class="node node--main" id="node-storyboard">
+              <div class="node__title">分镜生成（关联资产）</div>
+              <div class="node__sub">06_storyboard/storyboard.json</div>
+            </div>
+
+            <div class="node node--main" id="node-board-stitch">
+              <div class="node__title">资产图拼接作为首帧图</div>
+              <div class="node__sub">07_shot_reference_boards/shot_reference_manifest.json</div>
+            </div>
+
+            <div class="node node--detail" id="node-board-publish">
+              <div class="node__title">首帧公网发布</div>
+              <div class="node__sub">board_publish · TOS / jsDelivr</div>
+            </div>
+
+            <div class="node node--detail" id="node-video-jobs">
+              <div class="node__title">镜头任务装配</div>
+              <div class="node__sub">08_video_jobs/video_jobs.json</div>
+            </div>
+
+            <div class="node node--main" id="node-video-generate">
+              <div class="node__title">视频生成</div>
+              <div class="node__sub">1 board + 1 shot prompt → shot videos</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase phase--post">
+        <div class="phase__tag">后期</div>
+        <div class="phase__panel">
+          <div class="phase__grid">
+            <div class="node node--main" id="node-shot-collect">
+              <div class="node__title">片段整理</div>
+              <div class="node__sub">09_shot_videos/shot_videos_manifest.json</div>
+            </div>
+
+            <div class="node node--detail" id="node-trim">
+              <div class="node__title">首帧裁切</div>
+              <div class="node__sub">trim_leading_seconds</div>
+            </div>
+
+            <div class="node node--detail" id="node-blackout">
+              <div class="node__title">黑场遮罩</div>
+              <div class="node__sub">blackout_leading_seconds</div>
+            </div>
+
+            <div class="node node--detail" id="node-concat-list">
+              <div class="node__title">FFmpeg 拼接列表</div>
+              <div class="node__sub">10_final/concat_inputs.txt</div>
+            </div>
+
+            <div class="node node--main" id="node-final-compose">
+              <div class="node__title">视频合成</div>
+              <div class="node__sub">10_final/final_video.mp4</div>
+            </div>
+          </div>
+        </div>
+        <div class="phase__note">当前实现中，所有分镜固定为 10 秒，并在合成前统一执行首帧去除与可选黑场遮罩。</div>
+      </section>
+
+      <div class="footer-note">
+        主线阶段顺序与代码保持一致：
+        <code>upstream → asset_extraction → style_bible → asset_prompts → asset_images → storyboard → shot_reference_boards → board_publish → video_jobs → shot_videos → final_video</code>。
+        可选并行节点为 <code>storyboard_seed</code>，它不会替代正式的 <code>storyboard.json</code>，只作为预分镜规划辅助。
+      </div>
+    </main>
+
+    <script>
+      const connections = [
+        { from: "node-input", to: "node-intent" },
+        { from: "node-intent", to: "node-router" },
+        { from: "node-intent", to: "node-script" },
+        { from: "node-intent", to: "node-readiness" },
+        { from: "node-router", to: "node-extract" },
+        { from: "node-script", to: "node-extract" },
+        { from: "node-readiness", to: "node-extract" },
+        { from: "node-extract", to: "node-asset-generate" },
+        { from: "node-asset-generate", to: "node-style" },
+        { from: "node-asset-generate", to: "node-prompts" },
+        { from: "node-style", to: "node-reference-assets" },
+        { from: "node-prompts", to: "node-reference-assets" },
+        { from: "node-reference-assets", to: "node-storyboard" },
+        { from: "node-storyboard-seed", to: "node-storyboard", dashed: true },
+        { from: "node-storyboard", to: "node-board-stitch" },
+        { from: "node-board-stitch", to: "node-board-publish" },
+        { from: "node-board-stitch", to: "node-video-jobs" },
+        { from: "node-board-publish", to: "node-video-generate" },
+        { from: "node-video-jobs", to: "node-video-generate" },
+        { from: "node-video-generate", to: "node-shot-collect" },
+        { from: "node-shot-collect", to: "node-trim" },
+        { from: "node-shot-collect", to: "node-blackout" },
+        { from: "node-shot-collect", to: "node-concat-list" },
+        { from: "node-trim", to: "node-final-compose" },
+        { from: "node-blackout", to: "node-final-compose" },
+        { from: "node-concat-list", to: "node-final-compose" },
+      ];
+
+      function getRelativeRect(element, container) {
+        const elementRect = element.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        return {
+          left: elementRect.left - containerRect.left,
+          top: elementRect.top - containerRect.top,
+          right: elementRect.right - containerRect.left,
+          bottom: elementRect.bottom - containerRect.top,
+          width: elementRect.width,
+          height: elementRect.height,
+          centerX: elementRect.left - containerRect.left + elementRect.width / 2,
+          centerY: elementRect.top - containerRect.top + elementRect.height / 2,
+        };
+      }
+
+      function buildOrthogonalPath(fromRect, toRect) {
+        const dx = toRect.centerX - fromRect.centerX;
+        const dy = toRect.centerY - fromRect.centerY;
+        const preferHorizontal = Math.abs(dx) >= Math.abs(dy) * 0.9;
+        const pad = 8;
+
+        if (preferHorizontal) {
+          const startX = dx >= 0 ? fromRect.right + pad : fromRect.left - pad;
+          const startY = fromRect.centerY;
+          const endX = dx >= 0 ? toRect.left - pad : toRect.right + pad;
+          const endY = toRect.centerY;
+          const midX = startX + (endX - startX) / 2;
+          return `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+        }
+
+        const startX = fromRect.centerX;
+        const startY = dy >= 0 ? fromRect.bottom + pad : fromRect.top - pad;
+        const endX = toRect.centerX;
+        const endY = dy >= 0 ? toRect.top - pad : toRect.bottom + pad;
+        const midY = startY + (endY - startY) / 2;
+        return `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+      }
+
+      function renderConnections() {
+        const page = document.getElementById("workflow-page");
+        const svg = document.getElementById("workflow-lines");
+        const group = document.getElementById("workflow-paths");
+        if (!page || !svg || !group) {
+          return;
+        }
+
+        const pageRect = page.getBoundingClientRect();
+        svg.setAttribute("viewBox", `0 0 ${pageRect.width} ${pageRect.height}`);
+        svg.setAttribute("width", pageRect.width);
+        svg.setAttribute("height", pageRect.height);
+        group.innerHTML = "";
+
+        connections.forEach((connection) => {
+          const from = document.getElementById(connection.from);
+          const to = document.getElementById(connection.to);
+          if (!from || !to) {
+            return;
+          }
+
+          const fromRect = getRelativeRect(from, page);
+          const toRect = getRelativeRect(to, page);
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", buildOrthogonalPath(fromRect, toRect));
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", "#1f1f1f");
+          path.setAttribute("stroke-width", "3.5");
+          path.setAttribute("stroke-linecap", "round");
+          path.setAttribute("stroke-linejoin", "round");
+          path.setAttribute("marker-end", "url(#arrowhead)");
+          if (connection.dashed) {
+            path.setAttribute("stroke-dasharray", "9 8");
+          }
+          group.appendChild(path);
+        });
+      }
+
+      window.addEventListener("load", renderConnections);
+      window.addEventListener("resize", renderConnections);
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(renderConnections);
+      }
+    </script>
+  </body>
+</html>

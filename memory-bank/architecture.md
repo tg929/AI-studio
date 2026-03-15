@@ -43,6 +43,7 @@ Current role:
 - Owns per-stage execution, mainline execution, artifact snapshotting, and board-publish strategy selection
 - Persists stage outcomes through the run-state helpers
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
+- Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
 - Keeps the existing pipeline modules as the stage implementation boundary
 
 ### `app/run_state.py`
@@ -81,6 +82,7 @@ Current role:
 - Provides run listing, run detail, artifact listing, event listing, task listing, continue, rerun-stage, and review endpoints
 - Serves local run artifacts through a bounded `/media/{run_id}/...` route
 - Converts synchronous create-run validation failures into readable API responses for the console
+- Exposes `/api/runs/{run_id}/videos` for shot-video and final-video preview data
 
 ### `app/ui.py`
 
@@ -91,6 +93,7 @@ Current role:
 - Displays upstream review data, asset-image galleries, and storyboard shot summaries
 - Surfaces the current `awaiting_approval_stage` directly in the run detail header
 - Adds richer operator review interactions for `asset_images` and `storyboard`, including filters, search, lightbox preview, shot navigation, and reference-asset inspection
+- Displays shot-video cards and the final stitched video directly inside the run detail page
 
 ### `run_operator_console.py`
 
