@@ -330,6 +330,15 @@ The project now has:
 - `pipeline/shot_videos.py` was updated for better resumability:
   - it now writes `shot_videos_manifest.json` incrementally after each accumulated result
   - future long runs will keep partial progress even if a later external API error interrupts the command
+- After updating the video API credentials, `run12` was resumed successfully:
+  - `video_jobs.json` was locally switched to `raw.githubusercontent.com` first-frame URLs for `shot_009` through `shot_012` to avoid jsDelivr cache uncertainty on the updated `shot_012` board
+  - `shot_009` through `shot_012` then all succeeded
+  - `runs/run12/09_shot_videos/shot_videos_manifest.json` now records 12 succeeded shot videos
+- `run12` now also includes the full final-output stage under `10_final/`:
+  - concat input list
+  - final video manifest
+  - concatenated final video `final_video.mp4`
+  - per-shot trimmed intermediates for all 12 shots
 - Current locked storyboard/video-prep decisions:
   - the later shot board is the video model `first_frame`
   - `storyboard.json` is a structured shot-planning contract, not the final video prompt
