@@ -126,6 +126,16 @@ Last updated: 2026-03-15
   - `00_source/source_input.txt`
   - `00_source/source_context.json`
   - `00_source/intent_packet_request.json`
+- Completed the first real intent-to-script sample under `runs/run11` from a keywords-only input:
+  - `00_source/intent_packet.json`
+  - `00_source/story_blueprint.json`
+  - `00_source/generated_script.txt`
+  - `00_source/script_quality_report.json`
+  - `01_input/script_clean.txt`
+- The first real `run11` script-quality result passed all hard checks:
+  - `passes_hard_checks = true`
+  - `repair_needed = false`
+  - the generated script is now considered ready for downstream asset extraction and storyboard generation
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -186,6 +196,25 @@ The project now has:
   - script generation
   - script quality review
 - The first verification for the new intent-to-script path is a dry run only; the first real sample generation is still pending.
+- The first real sample for the new intent-to-script path has now completed under `runs/run11`.
+- During the first real `run11` attempt, the story-blueprint stage exposed a practical drift case:
+  - a scene `visual_anchors` list exceeded the schema max length
+  - generic crowd labels appeared in `character_focus`
+  - `pipeline/intent_to_script.py` was then hardened with additional normalization to trim mild overflows and filter unknown beat references
+- Created `runs/run12` as the new formal continuation directory for the intent-to-script path:
+  - copied `runs/run11/00_source` into `runs/run12/00_source`
+  - regenerated `runs/run12/01_input/script_clean.txt`
+  - completed `runs/run12/02_assets/asset_registry.json`
+- `run12` is now the active continuation run for the new upstream mode.
+- Continued `run12` through the downstream planning stages:
+  - `03_style/style_bible.json`
+  - `04_asset_prompts/asset_prompts.json`
+  - `05_asset_images/asset_images_manifest.json`
+  - `06_storyboard/storyboard.json`
+  - `07_shot_reference_boards/shot_reference_manifest.json`
+  - `08_video_jobs/video_jobs.json`
+- Current `run12` blocker:
+  - `video_jobs.json` is assembled successfully, but jobs are still `blocked_missing_first_frame_url` because the new `run12` shot boards have not yet been published to a real public URL
 - If the new intent-to-script node resolves the source input mode to `script`, it currently reuses the normalized source text instead of rewriting it.
 - The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
 - The style-bible node uses the same prompt-constrained JSON + local schema validation path.
@@ -279,7 +308,19 @@ The project now has:
   - reads `storyboard.json` + `asset_images_manifest.json`
   - always includes the shot's `primary_scene_id`
   - then places visible characters and visible props into a fixed grid template
-  - preserves the original labeled asset images without cropping or overlaying new text
+  - now trims uniform outer borders from raw asset images, removes inter-cell padding, uses cover-fit placement, and renders a consistent local black label bar inside each occupied slot
+- `run12` shot reference boards were regenerated after the layout tightening pass:
+  - `07_shot_reference_boards/boards/*.png` now use zero outer padding and zero gutter
+  - occupied cells now fill their quarter/half-grid areas much more tightly than the previous `contain` layout
+  - `08_video_jobs/video_jobs.json` still validates afterward and remains blocked only by missing public `board_public_url` values
+- `run12` has now also been republished into the repo-local `static/` tree with jsDelivr URL placeholders:
+  - `runs/run12/07_shot_reference_boards/board_publish_result.json` points at `https://cdn.jsdelivr.net/gh/tg929/AI-studio@main/static/runs/run12/...`
+  - `runs/run12/08_video_jobs/video_jobs.json` now marks all 12 jobs as `ready`
+  - the copied board PNGs exist under `static/runs/run12/07_shot_reference_boards/boards/`
+- A real `09_shot_videos` smoke test was attempted for `run12/shot_001`:
+  - the video task creation failed immediately with `ArkBadRequestError`
+  - backend message: `content[1].image_url` is invalid because the resource was not found
+  - current blocker is no longer local pipeline assembly; it is that `static/runs/run12/...` has not been committed and pushed to GitHub yet, so jsDelivr cannot serve those new board files
 - Current locked storyboard/video-prep decisions:
   - the later shot board is the video model `first_frame`
   - `storyboard.json` is a structured shot-planning contract, not the final video prompt

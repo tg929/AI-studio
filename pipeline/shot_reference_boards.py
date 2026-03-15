@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont, ImageStat
 
 from pipeline.io import read_json, write_json
 from schemas.asset_images_manifest import AssetImagesManifest
@@ -15,11 +15,23 @@ from schemas.storyboard import Storyboard
 
 CANVAS_WIDTH = 1920
 CANVAS_HEIGHT = 1080
-OUTER_PADDING_PX = 24
-GUTTER_PX = 24
+OUTER_PADDING_PX = 0
+GUTTER_PX = 0
 BACKGROUND_COLOR = "#FFFFFF"
 BLANK_CELL_FILL = "#FFFFFF"
-FIT_MODE = "contain"
+FIT_MODE = "cover"
+LABEL_BAR_FILL = "#000000"
+LABEL_TEXT_FILL = "#FFFFFF"
+LABEL_BAR_HEIGHT_RATIO = 0.14
+LABEL_BAR_MIN_HEIGHT_PX = 72
+LABEL_BAR_MAX_HEIGHT_PX = 104
+LABEL_SIDE_PADDING_PX = 24
+LABEL_FONT_MIN_SIZE = 18
+LABEL_FONT_DIVISOR = 3
+BORDER_ACTIVITY_STD_THRESHOLD = 14.0
+TRIM_BACKOFF_PX = 8
+MAX_VERTICAL_TRIM_RATIO = 0.12
+MAX_HORIZONTAL_TRIM_RATIO = 0.08
 
 LAYOUT_DIMENSIONS = {
     "grid_1x1": (1, 1),
@@ -59,11 +71,29 @@ def build_board_artifacts(run_dir: Path) -> ShotReferenceBoardArtifacts:
     return ShotReferenceBoardArtifacts(run_dir=run_dir, board_dir=board_dir, boards_dir=boards_dir)
 
 
-def build_asset_image_map(asset_images_manifest: AssetImagesManifest) -> dict[str, dict[str, str]]:
+def build_asset_image_map(asset_images_manifest: AssetImagesManifest) -> dict[str, dict[str, dict[str, str]]]:
     return {
-        "scene": {item.id: item.local_image_path for item in asset_images_manifest.scenes},
-        "character": {item.id: item.local_image_path for item in asset_images_manifest.characters},
-        "prop": {item.id: item.local_image_path for item in asset_images_manifest.props},
+        "scene": {
+            item.id: {
+                "source_image_path": item.raw_image_path or item.local_image_path,
+                "label_text": item.label_text,
+            }
+            for item in asset_images_manifest.scenes
+        },
+        "character": {
+            item.id: {
+                "source_image_path": item.raw_image_path or item.local_image_path,
+                "label_text": item.label_text,
+            }
+            for item in asset_images_manifest.characters
+        },
+        "prop": {
+            item.id: {
+                "source_image_path": item.raw_image_path or item.local_image_path,
+                "label_text": item.label_text,
+            }
+            for item in asset_images_manifest.props
+        },
     }
 
 
@@ -103,17 +133,18 @@ def build_target_boxes(layout_template: str) -> list[dict[str, int]]:
     return boxes
 
 
-def build_ordered_assets(shot, asset_image_map: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+def build_ordered_assets(shot, asset_image_map: dict[str, dict[str, dict[str, str]]]) -> list[dict[str, str]]:
     assets: list[dict[str, str]] = []
 
-    scene_path = asset_image_map["scene"].get(shot.primary_scene_id)
-    if not scene_path:
+    scene_asset = asset_image_map["scene"].get(shot.primary_scene_id)
+    if not scene_asset:
         raise FileNotFoundError(f"Scene asset image not found for {shot.primary_scene_id}")
     assets.append(
         {
             "asset_type": "scene",
             "asset_id": shot.primary_scene_id,
-            "source_image_path": scene_path,
+            "source_image_path": scene_asset["source_image_path"],
+            "label_text": scene_asset["label_text"],
         }
     )
 
@@ -133,50 +164,184 @@ def build_ordered_assets(shot, asset_image_map: dict[str, dict[str, str]]) -> li
     remaining_prop_ids = [asset_id for asset_id in shot.visible_prop_ids if asset_id not in primary_prop_ids]
 
     for character_id in primary_character_ids + remaining_character_ids:
-        image_path = asset_image_map["character"].get(character_id)
-        if not image_path:
+        asset_entry = asset_image_map["character"].get(character_id)
+        if not asset_entry:
             raise FileNotFoundError(f"Character asset image not found for {character_id}")
         assets.append(
             {
                 "asset_type": "character",
                 "asset_id": character_id,
-                "source_image_path": image_path,
+                "source_image_path": asset_entry["source_image_path"],
+                "label_text": asset_entry["label_text"],
             }
         )
 
     for prop_id in primary_prop_ids + remaining_prop_ids:
-        image_path = asset_image_map["prop"].get(prop_id)
-        if not image_path:
+        asset_entry = asset_image_map["prop"].get(prop_id)
+        if not asset_entry:
             raise FileNotFoundError(f"Prop asset image not found for {prop_id}")
         assets.append(
             {
                 "asset_type": "prop",
                 "asset_id": prop_id,
-                "source_image_path": image_path,
+                "source_image_path": asset_entry["source_image_path"],
+                "label_text": asset_entry["label_text"],
             }
         )
 
     return assets
 
 
+def resolve_label_font_path() -> Path:
+    candidates = [
+        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+        Path("/System/Library/Fonts/STHeiti Light.ttc"),
+        Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+        Path("/System/Library/Fonts/PingFang.ttc"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    raise FileNotFoundError("No usable Chinese font file found for shot board label rendering")
+
+
+def fit_font(draw: ImageDraw.ImageDraw, text: str, font_path: Path, max_width: int, font_size: int) -> ImageFont.FreeTypeFont:
+    while font_size >= LABEL_FONT_MIN_SIZE:
+        font = ImageFont.truetype(str(font_path), font_size)
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        if right - left <= max_width:
+            return font
+        font_size -= 2
+    return ImageFont.truetype(str(font_path), LABEL_FONT_MIN_SIZE)
+
+
+def _row_activity_score(image: Image.Image, row_index: int) -> float:
+    stat = ImageStat.Stat(image.crop((0, row_index, image.width, row_index + 1)))
+    return float(sum(stat.stddev) / len(stat.stddev))
+
+
+def _column_activity_score(image: Image.Image, column_index: int) -> float:
+    stat = ImageStat.Stat(image.crop((column_index, 0, column_index + 1, image.height)))
+    return float(sum(stat.stddev) / len(stat.stddev))
+
+
+def _detect_trim_start(image: Image.Image) -> int:
+    max_trim = max(0, int(image.height * MAX_VERTICAL_TRIM_RATIO))
+    for offset in range(max_trim):
+        if _row_activity_score(image, offset) >= BORDER_ACTIVITY_STD_THRESHOLD:
+            return max(0, offset - TRIM_BACKOFF_PX)
+    return 0
+
+
+def _detect_trim_end(image: Image.Image) -> int:
+    max_trim = max(0, int(image.height * MAX_VERTICAL_TRIM_RATIO))
+    for offset in range(max_trim):
+        row_index = image.height - 1 - offset
+        if _row_activity_score(image, row_index) >= BORDER_ACTIVITY_STD_THRESHOLD:
+            return max(0, offset - TRIM_BACKOFF_PX)
+    return 0
+
+
+def _detect_trim_left(image: Image.Image) -> int:
+    max_trim = max(0, int(image.width * MAX_HORIZONTAL_TRIM_RATIO))
+    for offset in range(max_trim):
+        if _column_activity_score(image, offset) >= BORDER_ACTIVITY_STD_THRESHOLD:
+            return max(0, offset - TRIM_BACKOFF_PX)
+    return 0
+
+
+def _detect_trim_right(image: Image.Image) -> int:
+    max_trim = max(0, int(image.width * MAX_HORIZONTAL_TRIM_RATIO))
+    for offset in range(max_trim):
+        column_index = image.width - 1 - offset
+        if _column_activity_score(image, column_index) >= BORDER_ACTIVITY_STD_THRESHOLD:
+            return max(0, offset - TRIM_BACKOFF_PX)
+    return 0
+
+
+def trim_uniform_border(image: Image.Image) -> Image.Image:
+    top = _detect_trim_start(image)
+    bottom = _detect_trim_end(image)
+    left = _detect_trim_left(image)
+    right = _detect_trim_right(image)
+
+    crop_left = left
+    crop_top = top
+    crop_right = max(crop_left + 1, image.width - right)
+    crop_bottom = max(crop_top + 1, image.height - bottom)
+
+    if crop_right <= crop_left or crop_bottom <= crop_top:
+        return image
+    return image.crop((crop_left, crop_top, crop_right, crop_bottom))
+
+
+def resize_cover(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    scale = max(target_width / image.width, target_height / image.height)
+    resized_width = max(1, int(round(image.width * scale)))
+    resized_height = max(1, int(round(image.height * scale)))
+    resized = image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+
+    crop_left = max(0, (resized_width - target_width) // 2)
+    crop_top = max(0, (resized_height - target_height) // 2)
+    crop_right = crop_left + target_width
+    crop_bottom = crop_top + target_height
+    return resized.crop((crop_left, crop_top, crop_right, crop_bottom))
+
+
+def render_slot_label(
+    *,
+    draw: ImageDraw.ImageDraw,
+    font_path: Path,
+    box: dict[str, int],
+    label_text: str,
+) -> None:
+    label_height = max(
+        LABEL_BAR_MIN_HEIGHT_PX,
+        min(LABEL_BAR_MAX_HEIGHT_PX, int(box["height"] * LABEL_BAR_HEIGHT_RATIO)),
+    )
+    label_top = int(box["y"]) + int(box["height"]) - label_height
+    draw.rectangle(
+        (
+            int(box["x"]),
+            label_top,
+            int(box["x"]) + int(box["width"]),
+            int(box["y"]) + int(box["height"]),
+        ),
+        fill=LABEL_BAR_FILL,
+    )
+
+    font = fit_font(
+        draw,
+        label_text,
+        font_path,
+        max_width=int(box["width"]) - 2 * LABEL_SIDE_PADDING_PX,
+        font_size=max(LABEL_FONT_MIN_SIZE, label_height // LABEL_FONT_DIVISOR),
+    )
+    left, top, right, bottom = draw.textbbox((0, 0), label_text, font=font)
+    text_x = int(box["x"]) + (int(box["width"]) - (right - left)) // 2
+    text_y = label_top + (label_height - (bottom - top)) // 2 - top
+    draw.text((text_x, text_y), label_text, fill=LABEL_TEXT_FILL, font=font)
+
+
 def render_board_image(slots: list[dict[str, object]], output_path: Path) -> None:
     canvas = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), color=BACKGROUND_COLOR)
+    draw = ImageDraw.Draw(canvas)
+    font_path = resolve_label_font_path()
 
     for slot in slots:
         source_image_path = Path(str(slot["source_image_path"]))
-        image = Image.open(source_image_path).convert("RGB")
+        image = trim_uniform_border(Image.open(source_image_path).convert("RGB"))
         box = slot["target_box"]
         box_width = int(box["width"])
         box_height = int(box["height"])
-
-        scale = min(box_width / image.width, box_height / image.height)
-        resized_width = max(1, int(image.width * scale))
-        resized_height = max(1, int(image.height * scale))
-        resized = image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
-
-        paste_x = int(box["x"]) + (box_width - resized_width) // 2
-        paste_y = int(box["y"]) + (box_height - resized_height) // 2
-        canvas.paste(resized, (paste_x, paste_y))
+        resized = resize_cover(image, box_width, box_height)
+        canvas.paste(resized, (int(box["x"]), int(box["y"])))
+        render_slot_label(
+            draw=draw,
+            font_path=font_path,
+            box=box,
+            label_text=str(slot["label_text"]),
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(output_path, format="PNG")
@@ -198,9 +363,27 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
         target_boxes = build_target_boxes(layout_template)
         board_path = (artifacts.boards_dir / f"{shot.id}.png").resolve()
 
+        render_slots_payload: list[dict[str, object]] = []
         slots_payload: list[dict[str, object]] = []
         blank_slots: list[int] = []
         for box, asset in zip(target_boxes, ordered_assets, strict=False):
+            render_slots_payload.append(
+                {
+                    "slot_index": box["slot_index"],
+                    "row": box["row"],
+                    "col": box["col"],
+                    "asset_type": asset["asset_type"],
+                    "asset_id": asset["asset_id"],
+                    "source_image_path": asset["source_image_path"],
+                    "label_text": asset["label_text"],
+                    "target_box": {
+                        "x": box["x"],
+                        "y": box["y"],
+                        "width": box["width"],
+                        "height": box["height"],
+                    },
+                }
+            )
             slots_payload.append(
                 {
                     "slot_index": box["slot_index"],
@@ -219,7 +402,7 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
             )
         blank_slots.extend(box["slot_index"] for box in target_boxes[len(ordered_assets) :])
 
-        render_board_image(slots_payload, board_path)
+        render_board_image(render_slots_payload, board_path)
 
         boards_payload.append(
             {
@@ -251,8 +434,8 @@ def generate_shot_reference_boards(*, storyboard_path: Path) -> ShotReferenceBoa
             "outer_padding_px": OUTER_PADDING_PX,
             "gutter_px": GUTTER_PX,
             "fit_mode": FIT_MODE,
-            "preserve_asset_labels": True,
-            "add_overlay_text": False,
+            "preserve_asset_labels": False,
+            "add_overlay_text": True,
             "blank_cell_fill": BLANK_CELL_FILL,
         },
         "boards": boards_payload,

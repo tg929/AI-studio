@@ -33,9 +33,9 @@ class BoardDefaults(StrictModel):
     background_color: str
     outer_padding_px: int = Field(ge=0)
     gutter_px: int = Field(ge=0)
-    fit_mode: Literal["contain"]
-    preserve_asset_labels: Literal[True]
-    add_overlay_text: Literal[False]
+    fit_mode: Literal["contain", "cover"]
+    preserve_asset_labels: bool
+    add_overlay_text: bool
     blank_cell_fill: str
 
 

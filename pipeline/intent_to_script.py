@@ -81,6 +81,17 @@ def split_string_list(value: Any) -> list[str]:
     return []
 
 
+def unique_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
 def normalize_choice(value: Any, mapping: dict[str, str], default: str) -> str:
     if isinstance(value, str):
         normalized = value.strip().lower()
@@ -100,6 +111,23 @@ def normalize_int(value: Any, *, default: int, minimum: int, maximum: int) -> in
         except ValueError:
             return default
     return default
+
+
+def normalize_inline_string(value: Any) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            inner = text[1:-1].strip()
+            if inner:
+                inner = inner.replace("'", "").replace('"', "")
+                parts = [part.strip() for part in inner.replace("，", ",").split(",") if part.strip()]
+                return " / ".join(parts)
+            return ""
+        return text
+    if isinstance(value, list):
+        parts = [str(item).strip() for item in value if str(item).strip()]
+        return " / ".join(parts)
+    return str(value).strip()
 
 
 def normalize_bool(value: Any) -> bool:
@@ -301,12 +329,12 @@ def normalize_intent_packet_payload(
         },
         {"keywords": "high", "brief": "medium", "script": "low"}[resolved_input_mode],
     )
-    normalized["intent_summary"] = str(normalized.get("intent_summary", "")).strip() or source_text[:120].strip()
-    normalized["tone"] = str(normalized.get("tone", "")).strip()
-    normalized["era"] = str(normalized.get("era", "")).strip()
-    normalized["world_setting"] = str(normalized.get("world_setting", "")).strip()
-    normalized["core_conflict"] = str(normalized.get("core_conflict", "")).strip()
-    normalized["protagonist_seed"] = str(normalized.get("protagonist_seed", "")).strip()
+    normalized["intent_summary"] = normalize_inline_string(normalized.get("intent_summary")) or source_text[:120].strip()
+    normalized["tone"] = normalize_inline_string(normalized.get("tone"))
+    normalized["era"] = normalize_inline_string(normalized.get("era"))
+    normalized["world_setting"] = normalize_inline_string(normalized.get("world_setting"))
+    normalized["core_conflict"] = normalize_inline_string(normalized.get("core_conflict"))
+    normalized["protagonist_seed"] = normalize_inline_string(normalized.get("protagonist_seed"))
     normalized["must_have_elements"] = split_string_list(normalized.get("must_have_elements"))
     normalized["forbidden_elements"] = split_string_list(normalized.get("forbidden_elements"))
     normalized["assumptions"] = split_string_list(normalized.get("assumptions"))
@@ -362,7 +390,7 @@ def normalize_story_blueprint_payload(payload: dict[str, Any], *, source_script_
             "minor",
         )
         character_plan.append(record)
-    normalized["character_plan"] = character_plan
+    normalized["character_plan"] = character_plan[:4]
 
     scene_plan = []
     for item in normalized.get("scene_plan", []):
@@ -373,9 +401,9 @@ def normalize_story_blueprint_payload(payload: dict[str, Any], *, source_script_
             record["dramatic_use"] = record.pop("dramaticUse")
         if "visual_anchors" not in record and "visualAnchors" in record:
             record["visual_anchors"] = record.pop("visualAnchors")
-        record["visual_anchors"] = split_string_list(record.get("visual_anchors"))
+        record["visual_anchors"] = unique_preserve_order(split_string_list(record.get("visual_anchors")))[:5]
         scene_plan.append(record)
-    normalized["scene_plan"] = scene_plan
+    normalized["scene_plan"] = scene_plan[:3]
 
     prop_plan = []
     for item in normalized.get("prop_plan", []):
@@ -385,7 +413,7 @@ def normalize_story_blueprint_payload(payload: dict[str, Any], *, source_script_
         if "visual_seed" not in record and "visualSeed" in record:
             record["visual_seed"] = record.pop("visualSeed")
         prop_plan.append(record)
-    normalized["prop_plan"] = prop_plan
+    normalized["prop_plan"] = prop_plan[:3]
 
     beat_sheet = []
     for item in normalized.get("beat_sheet", []):
@@ -424,11 +452,37 @@ def normalize_story_blueprint_payload(payload: dict[str, Any], *, source_script_
             },
             "pressure",
         )
-        record["character_focus"] = split_string_list(record.get("character_focus"))
-        record["prop_focus"] = split_string_list(record.get("prop_focus"))
-        record["visual_anchors"] = split_string_list(record.get("visual_anchors"))
+        record["character_focus"] = unique_preserve_order(split_string_list(record.get("character_focus")))
+        record["prop_focus"] = unique_preserve_order(split_string_list(record.get("prop_focus")))
+        record["visual_anchors"] = unique_preserve_order(split_string_list(record.get("visual_anchors")))
         beat_sheet.append(record)
-    normalized["beat_sheet"] = beat_sheet
+    normalized["beat_sheet"] = beat_sheet[:8]
+
+    known_character_names = {
+        str(item.get("name", "")).strip()
+        for item in normalized["character_plan"]
+        if str(item.get("name", "")).strip()
+    }
+    known_scene_names = {
+        str(item.get("name", "")).strip()
+        for item in normalized["scene_plan"]
+        if str(item.get("name", "")).strip()
+    }
+    known_prop_names = {
+        str(item.get("name", "")).strip()
+        for item in normalized["prop_plan"]
+        if str(item.get("name", "")).strip()
+    }
+    filtered_beats = []
+    for record in normalized["beat_sheet"]:
+        record = dict(record)
+        record["character_focus"] = [item for item in record["character_focus"] if item in known_character_names]
+        record["prop_focus"] = [item for item in record["prop_focus"] if item in known_prop_names]
+        scene_name = str(record.get("scene_name", "")).strip()
+        if scene_name not in known_scene_names and normalized["scene_plan"]:
+            record["scene_name"] = normalized["scene_plan"][0]["name"]
+        filtered_beats.append(record)
+    normalized["beat_sheet"] = filtered_beats
 
     normalized["schema_version"] = "1.0"
     normalized["source_script_name"] = source_script_name
