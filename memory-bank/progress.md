@@ -270,6 +270,14 @@ The project now has:
 - Added `.env` ignore rules so local VeADK env files stay out of git.
 - Added `tos` to `requirements.txt` for the TOS board-publishing path.
 - Full continuation into shot-video generation now depends on `BOARD_TOS_*` envs in `ai_studio_flow/.env`.
+- Fixed the VeADK web `run14` failure mode in `pipeline/asset_extraction.py`:
+  - the text client may reject `response_format={"type":"json_object"}` with `ArkBadRequestError`, not only `TypeError`
+  - asset extraction now detects that specific unsupported-parameter error and retries automatically without `response_format`
+- Fixed the VeADK web `board_publish` gating logic in `ai_studio_flow/workflow_tools.py`:
+  - TOS remains the first publish strategy when `BOARD_TOS_*` envs are configured
+  - otherwise the workflow now falls back to the existing GitHub + jsDelivr publish path
+  - the fallback copies board PNGs into `static/runs/...`, updates `shot_reference_manifest.json`, and checks whether the public CDN URL is already reachable
+  - if jsDelivr still returns `404`, the workflow now blocks with the correct next action: commit and push the generated `static/runs/...` files
 - Reworked shot-board composition so asset completeness now takes priority over forced cell fill:
   - `grid_1x1`, `grid_2x1`, `grid_2x2`, and `grid_3x2` now use adaptive row layouts
   - all shot-board assets are rendered with full-image containment instead of default `cover` cropping

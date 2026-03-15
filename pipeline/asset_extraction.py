@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from volcenginesdkarkruntime._exceptions import ArkBadRequestError
+
 from prompts.asset_extraction import (
     ASSET_EXTRACTION_SYSTEM_PROMPT,
     build_asset_extraction_user_prompt,
@@ -175,6 +177,21 @@ def parse_asset_registry_response(raw_text: str) -> dict[str, Any]:
         return json.loads(extract_first_json_object(text))
 
 
+def is_unsupported_json_response_format_error(error: Exception) -> bool:
+    if not isinstance(error, ArkBadRequestError):
+        return False
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        error_payload = body.get("error", {})
+        if isinstance(error_payload, dict):
+            param = str(error_payload.get("param", ""))
+            message = str(error_payload.get("message", ""))
+            if param == "response_format.type" and "json_object" in message and "not supported" in message:
+                return True
+    message = str(error)
+    return "response_format.type" in message and "json_object" in message and "not supported" in message
+
+
 def create_script_clean_payload(
     *,
     source_script_name: str,
@@ -251,6 +268,16 @@ def extract_asset_registry_from_text(
                 timeout=600.0,
             )
         except TypeError:
+            return client.chat.completions.create(
+                model=model_config.model_name,
+                messages=request_messages,
+                temperature=0.0,
+                max_tokens=max_tokens,
+                timeout=600.0,
+            )
+        except Exception as error:
+            if not is_unsupported_json_response_format_error(error):
+                raise
             return client.chat.completions.create(
                 model=model_config.model_name,
                 messages=request_messages,

@@ -4,9 +4,11 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path, PurePosixPath
+import subprocess
 from typing import Any, Literal
 
 from google.adk.tools import ToolContext
+import httpx
 from pydantic import BaseModel, Field, model_validator
 from tos import TosClientV2
 from tos.enum import HttpMethodType
@@ -28,6 +30,7 @@ from pipeline.runtime import (
 from pipeline.asset_prompts import generate_asset_prompts
 from pipeline.asset_images import generate_asset_images
 from pipeline.shot_reference_boards import generate_shot_reference_boards
+from pipeline.shot_reference_publish import publish_shot_reference_boards
 from pipeline.shot_videos import generate_shot_videos
 from pipeline.storyboard import generate_storyboard
 from pipeline.style_bible import generate_style_bible
@@ -129,6 +132,9 @@ def _set_stage(tool_context: ToolContext, stage: str) -> None:
 
 
 def _artifact_snapshot(run_dir: Path) -> dict[str, str]:
+    board_publish_result_path = run_dir / "07_shot_reference_boards" / "board_publish_tos_result.json"
+    if not board_publish_result_path.exists():
+        board_publish_result_path = run_dir / "07_shot_reference_boards" / "board_publish_result.json"
     paths = {
         "source_input_path": run_dir / "00_source" / "source_input.txt",
         "intake_router_path": run_dir / "00_source" / "intake_router.json",
@@ -140,7 +146,7 @@ def _artifact_snapshot(run_dir: Path) -> dict[str, str]:
         "asset_images_manifest_path": run_dir / "05_asset_images" / "asset_images_manifest.json",
         "storyboard_path": run_dir / "06_storyboard" / "storyboard.json",
         "shot_reference_manifest_path": run_dir / "07_shot_reference_boards" / "shot_reference_manifest.json",
-        "board_publish_result_path": run_dir / "07_shot_reference_boards" / "board_publish_tos_result.json",
+        "board_publish_result_path": board_publish_result_path,
         "video_jobs_path": run_dir / "08_video_jobs" / "video_jobs.json",
         "shot_videos_manifest_path": run_dir / "09_shot_videos" / "shot_videos_manifest.json",
         "final_video_manifest_path": run_dir / "10_final" / "final_video_manifest.json",
@@ -269,6 +275,72 @@ def _build_object_key(key_prefix: str, source_run: str, filename: str) -> str:
     parts = [part for part in key_prefix.split("/") if part]
     parts.extend(["runs", source_run, "07_shot_reference_boards", "boards", filename])
     return PurePosixPath(*parts).as_posix()
+
+
+def _run_git(args: list[str], repo_root: Path) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def _infer_github_repo_slug(repo_root: Path) -> str:
+    remote_url = _run_git(["config", "--get", "remote.origin.url"], repo_root)
+    if not remote_url:
+        raise ValueError(f"Cannot infer GitHub repo slug from target repo: {repo_root}")
+
+    normalized = remote_url.rstrip("/")
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+
+    if normalized.startswith("git@github.com:"):
+        path = normalized.split("git@github.com:", 1)[1]
+    elif normalized.startswith("https://github.com/"):
+        path = normalized.split("https://github.com/", 1)[1]
+    else:
+        raise ValueError(f"Unsupported GitHub remote URL format: {remote_url}")
+
+    parts = [part for part in path.split("/") if part]
+    if len(parts) != 2:
+        raise ValueError(f"Cannot parse owner/repo from remote URL: {remote_url}")
+    return f"{parts[0]}/{parts[1]}"
+
+
+def _infer_git_ref(repo_root: Path) -> str:
+    branch = _run_git(["branch", "--show-current"], repo_root)
+    if branch:
+        return branch
+    raise ValueError(f"Cannot infer current branch for target repo: {repo_root}")
+
+
+def _load_jsdelivr_publish_env(repo_root: Path) -> dict[str, str]:
+    repo_slug = os.getenv("BOARD_JSDELIVR_REPO_SLUG", "").strip()
+    ref = os.getenv("BOARD_JSDELIVR_REF", "").strip()
+    url_prefix = os.getenv("BOARD_JSDELIVR_URL_PREFIX", "static").strip() or "static"
+    publish_root_dir = os.getenv("BOARD_JSDELIVR_PUBLISH_ROOT", "").strip()
+
+    resolved_publish_root = Path(publish_root_dir).resolve() if publish_root_dir else repo_root.resolve()
+    return {
+        "repo_slug": repo_slug or _infer_github_repo_slug(repo_root),
+        "ref": ref or _infer_git_ref(repo_root),
+        "url_prefix": url_prefix,
+        "publish_root_dir": str(resolved_publish_root),
+    }
+
+
+def _check_public_url_reachable(url: str) -> tuple[bool, str]:
+    try:
+        with httpx.Client(follow_redirects=True, timeout=10.0) as client:
+            response = client.head(url)
+            if response.status_code == 405:
+                response = client.get(url)
+            return response.status_code == 200, f"HTTP {response.status_code}"
+    except Exception as exc:
+        return False, str(exc)
 
 
 def start_or_resume_workflow(
@@ -477,75 +549,120 @@ def run_board_publish_stage(tool_context: ToolContext | None = None) -> dict[str
         return _blocked(tool_context, "board_publish", f"shot_reference_manifest.json missing: {manifest_path}")
 
     tos_env = _load_board_publish_env()
-    if tos_env is None:
+    if tos_env is not None:
+        manifest = ShotReferenceManifest.model_validate(read_json(manifest_path))
+        client = TosClientV2(
+            ak=tos_env["access_key"],
+            sk=tos_env["secret_key"],
+            endpoint=tos_env["endpoint"],
+            region=tos_env["region"],
+        )
+        boards_payload: list[dict[str, object]] = []
+        published_entries: list[dict[str, str]] = []
+        try:
+            for board in manifest.boards:
+                source_path = Path(board.board_local_path)
+                if not source_path.exists():
+                    return _blocked(tool_context, "board_publish", f"board image missing: {source_path}")
+                object_key = _build_object_key(tos_env["key_prefix"], manifest.source_run, source_path.name)
+                with source_path.open("rb") as file_obj:
+                    client.put_object(
+                        bucket=tos_env["bucket"],
+                        key=object_key,
+                        content=file_obj,
+                        content_type="image/png",
+                        cache_control="public, max-age=31536000, immutable",
+                    )
+                signed_url = client.pre_signed_url(
+                    HttpMethodType.Http_Method_Get,
+                    bucket=tos_env["bucket"],
+                    key=object_key,
+                    expires=max(60, int(tos_env["url_expiry_seconds"])),
+                ).signed_url
+                payload = board.model_dump(mode="json")
+                payload["board_public_url"] = signed_url
+                boards_payload.append(payload)
+                published_entries.append(
+                    {
+                        "shot_id": board.shot_id,
+                        "source_path": str(source_path),
+                        "object_key": object_key,
+                        "signed_url": signed_url,
+                    }
+                )
+        finally:
+            client.close()
+
+        updated_manifest = ShotReferenceManifest.model_validate(
+            {**manifest.model_dump(mode="json"), "boards": boards_payload}
+        )
+        write_json(manifest_path, updated_manifest.model_dump(mode="json"))
+        result_path = run_dir / "07_shot_reference_boards" / "board_publish_tos_result.json"
+        write_json(
+            result_path,
+            {
+                "source_run": manifest.source_run,
+                "source_script_name": manifest.source_script_name,
+                "bucket": tos_env["bucket"],
+                "endpoint": tos_env["endpoint"],
+                "region": tos_env["region"],
+                "key_prefix": tos_env["key_prefix"],
+                "published_boards": published_entries,
+            },
+        )
+        tool_context.state["board_publish_result_path"] = str(result_path.resolve())
+        return _completed(
+            tool_context,
+            "board_publish",
+            run_dir,
+            {
+                "publish_strategy": "tos",
+                "message": "Published shot reference boards through TOS.",
+            },
+        )
+
+    try:
+        jsdelivr_env = _load_jsdelivr_publish_env(PROJECT_ROOT)
+    except Exception as exc:
         return _blocked(
             tool_context,
             "board_publish",
-            "Missing BOARD_TOS_* envs in ai_studio_flow/.env. Configure TOS publishing to continue into shot video generation.",
+            "No BOARD_TOS_* envs found, and jsDelivr fallback could not infer a usable GitHub repo configuration. "
+            f"Details: {exc}",
         )
 
-    manifest = ShotReferenceManifest.model_validate(read_json(manifest_path))
-    client = TosClientV2(
-        ak=tos_env["access_key"],
-        sk=tos_env["secret_key"],
-        endpoint=tos_env["endpoint"],
-        region=tos_env["region"],
+    public_base_url = f"https://cdn.jsdelivr.net/gh/{jsdelivr_env['repo_slug']}@{jsdelivr_env['ref']}"
+    publish_artifacts = publish_shot_reference_boards(
+        manifest_path=manifest_path,
+        public_base_url=public_base_url,
+        publish_root_dir=Path(jsdelivr_env["publish_root_dir"]),
+        url_prefix=jsdelivr_env["url_prefix"],
+        output_manifest_path=None,
     )
-    boards_payload: list[dict[str, object]] = []
-    published_entries: list[dict[str, str]] = []
-    try:
-        for board in manifest.boards:
-            source_path = Path(board.board_local_path)
-            if not source_path.exists():
-                return _blocked(tool_context, "board_publish", f"board image missing: {source_path}")
-            object_key = _build_object_key(tos_env["key_prefix"], manifest.source_run, source_path.name)
-            with source_path.open("rb") as file_obj:
-                client.put_object(
-                    bucket=tos_env["bucket"],
-                    key=object_key,
-                    content=file_obj,
-                    content_type="image/png",
-                    cache_control="public, max-age=31536000, immutable",
-                )
-            signed_url = client.pre_signed_url(
-                HttpMethodType.Http_Method_Get,
-                bucket=tos_env["bucket"],
-                key=object_key,
-                expires=max(60, int(tos_env["url_expiry_seconds"])),
-            ).signed_url
-            payload = board.model_dump(mode="json")
-            payload["board_public_url"] = signed_url
-            boards_payload.append(payload)
-            published_entries.append(
-                {
-                    "shot_id": board.shot_id,
-                    "source_path": str(source_path),
-                    "object_key": object_key,
-                    "signed_url": signed_url,
-                }
-            )
-    finally:
-        client.close()
+    tool_context.state["board_publish_result_path"] = str(publish_artifacts.result_path.resolve())
 
-    updated_manifest = ShotReferenceManifest.model_validate(
-        {**manifest.model_dump(mode="json"), "boards": boards_payload}
-    )
-    write_json(manifest_path, updated_manifest.model_dump(mode="json"))
-    result_path = run_dir / "07_shot_reference_boards" / "board_publish_tos_result.json"
-    write_json(
-        result_path,
+    updated_manifest = ShotReferenceManifest.model_validate(read_json(manifest_path))
+    sample_url = next((board.board_public_url for board in updated_manifest.boards if board.board_public_url), "")
+    reachable, detail = _check_public_url_reachable(sample_url) if sample_url else (False, "No sample board_public_url found")
+    if not reachable:
+        return _blocked(
+            tool_context,
+            "board_publish",
+            "Published shot boards into the local `static/` tree and wrote jsDelivr URLs into the manifest, "
+            "but the public CDN URL is not reachable yet. Commit and push the generated `static/runs/...` files, "
+            f"then resume the workflow. Sample URL check: {sample_url or 'N/A'} ({detail}).",
+        )
+
+    return _completed(
+        tool_context,
+        "board_publish",
+        run_dir,
         {
-            "source_run": manifest.source_run,
-            "source_script_name": manifest.source_script_name,
-            "bucket": tos_env["bucket"],
-            "endpoint": tos_env["endpoint"],
-            "region": tos_env["region"],
-            "key_prefix": tos_env["key_prefix"],
-            "published_boards": published_entries,
+            "publish_strategy": "jsdelivr",
+            "public_base_url": public_base_url,
+            "message": "Published shot reference boards through the GitHub + jsDelivr fallback path.",
         },
     )
-    tool_context.state["board_publish_result_path"] = str(result_path.resolve())
-    return _completed(tool_context, "board_publish", run_dir)
 
 
 def run_video_job_stage(tool_context: ToolContext | None = None) -> dict[str, Any]:

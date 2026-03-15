@@ -35,7 +35,9 @@ Current role:
 - Implements the current mainline workflow orchestration
 - Runs asset extraction and storyboard-seed planning in parallel
 - Continues through style, asset prompts, asset images, storyboard, boards, publish, video jobs, shot videos, and final concat
-- Publishes stitched boards to TOS when `BOARD_TOS_*` envs are configured
+- Publishes stitched boards through TOS when `BOARD_TOS_*` envs are configured
+- Falls back to the existing GitHub + jsDelivr publish path when TOS envs are absent
+- Verifies jsDelivr reachability and blocks with a commit/push requirement when the copied `static/runs/...` files are not public yet
 
 ### `ai_studio_flow/__init__.py`
 
@@ -85,6 +87,7 @@ Current role:
 - Supports both file-based script input and direct in-memory script text input
 - Calls the text model
 - Attempts JSON-mode when supported by the current text client
+- Falls back safely when the model rejects `response_format={"type":"json_object"}` at API level
 - Extracts the first balanced JSON object from mixed-content responses
 - Retries once with a shorter JSON-only instruction when the first response is invalid or truncated
 - Normalizes observed model field aliases
