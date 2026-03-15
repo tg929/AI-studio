@@ -222,6 +222,11 @@ The project now has:
   - regenerated `runs/run12/07_shot_reference_boards/*.png` with the new layout logic
 - Republished the regenerated `run12` shot boards into `static/runs/run12/...` and restored jsDelivr-style `board_public_url` values in `07_shot_reference_boards/shot_reference_manifest.json`.
 - Any future downstream reuse of the updated `run12` boards still requires committing and pushing the refreshed `static/runs/run12/...` files so the public CDN matches the local board images.
+- Hardened video-job assembly against the `shot_008` failure mode:
+  - published board URLs now include a version query derived from the local board file timestamp, which prevents stale CDN board reuse after layout changes
+  - multi-character shot prompts now explicitly forbid preserving side-by-side character-sheet composition in the video output
+  - compressed multi-character prompts now retain both primary character anchors instead of dropping to a single bound character
+  - crowd-reaction shots now allow non-dominant anonymous onlookers instead of contradicting the content block with a blanket ban on all extra people
 - If the new intent-to-script node resolves the source input mode to `script`, it currently reuses the normalized source text instead of rewriting it.
 - The asset extraction node currently uses prompt-constrained JSON output plus local schema validation.
 - The style-bible node uses the same prompt-constrained JSON + local schema validation path.

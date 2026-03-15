@@ -51,6 +51,7 @@ CAMERA_MOVEMENT_LABELS = {
 
 MAX_PROMPT_LENGTH = 650
 NON_PUBLIC_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
+CROWD_HINT_TOKENS = ("人群", "众人", "观众", "看台", "围观", "所有人")
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +121,24 @@ def choose_main_character_ids(shot) -> list[str]:
     return (primary + remaining)[:2]
 
 
+def is_multi_character_shot(shot) -> bool:
+    return len(choose_main_character_ids(shot)) >= 2 or shot.board_layout_hint == "multi_character"
+
+
+def allows_anonymous_onlookers(shot) -> bool:
+    searchable_text = " ".join(
+        text
+        for text in (
+            shot.prompt_core,
+            shot.subject_action,
+            shot.background_action,
+            shot.shot_purpose,
+        )
+        if text
+    )
+    return any(token in searchable_text for token in CROWD_HINT_TOKENS)
+
+
 def choose_main_prop_id(shot) -> str:
     primary = [
         asset_id
@@ -176,6 +195,8 @@ def build_prompt_blocks(shot, board, asset_registry: AssetRegistry, style_bible:
         "如果无法自然完成这一过渡，则优先在极短时间内转为纯黑画面，再从黑场进入正常镜头，"
         "不要让拼接图本身继续停留在可见画面中。"
     )
+    if is_multi_character_shot(shot):
+        transition_block += "不要把角色立绘、三视图、并排参考页直接保留在镜头里，所有主体必须进入同一个真实场景镜头。"
     single_take_block = "这是一个连续10秒的单镜头，不要切镜，不要分屏，不要让拼接板持续停留在视频里。"
 
     content_parts = [
@@ -208,10 +229,17 @@ def build_prompt_blocks(shot, board, asset_registry: AssetRegistry, style_bible:
     anchor_parts.append(f"整体风格保持{style_anchor}")
     anchor_block = "。".join(part for part in anchor_parts if part).rstrip("。") + "。"
 
-    negative_block = (
-        "禁止出现拼接板持续存在、白底、标签文字、分栏边框、UI感、额外未绑定角色、角色服装和年龄漂移、"
-        "场景结构漂移、道具替换、多镜头切换。若无法自然过渡，宁可短暂黑场，也不要继续显示资产拼接图。"
-    )
+    negative_parts = [
+        "禁止出现拼接板持续存在、白底、标签文字、分栏边框、UI感",
+        "禁止保留角色立绘、三视图、设定页并排排版",
+    ]
+    if allows_anonymous_onlookers(shot):
+        negative_parts.append("禁止新增抢戏的未绑定命名角色，但允许不抢戏的模糊围观人群")
+    else:
+        negative_parts.append("禁止额外未绑定角色")
+    negative_parts.append("禁止角色服装和年龄漂移、场景结构漂移、道具替换、多镜头切换")
+    negative_parts.append("若无法自然过渡，宁可短暂黑场，也不要继续显示资产拼接图")
+    negative_block = "，".join(negative_parts) + "。"
 
     return {
         "transition_block": transition_block,
@@ -255,21 +283,23 @@ def compress_prompt_blocks(blocks: dict[str, str], shot, asset_registry: AssetRe
     prop_map = {item.id: item for item in asset_registry.props}
 
     scene_anchor = build_scene_anchor(scene_map[shot.primary_scene_id])
-    main_character_ids = choose_main_character_ids(shot)[:1]
+    main_character_ids = choose_main_character_ids(shot)
+    if not is_multi_character_shot(shot):
+        main_character_ids = main_character_ids[:1]
     character_anchors = [build_character_anchor(character_map[character_id]) for character_id in main_character_ids]
     prop_id = choose_main_prop_id(shot)
     prop_anchor = build_prop_anchor(prop_map[prop_id]) if prop_id else ""
     continuity_notes = "；".join(shot.continuity_notes[:1])
     style_anchor = compress_text(style_bible.visual_style, 60)
 
-    anchor_parts = [f"必须保持{compress_text(scene_anchor, 50)}"]
+    anchor_parts = [f"必须保持{compress_text(scene_anchor, 42)}"]
     if character_anchors:
-        anchor_parts.append(compress_text("；".join(character_anchors), 50))
+        anchor_parts.append(compress_text("；".join(character_anchors), 72 if len(character_anchors) > 1 else 42))
     if prop_anchor:
-        anchor_parts.append(compress_text(prop_anchor, 40))
+        anchor_parts.append(compress_text(prop_anchor, 32))
     if continuity_notes:
-        anchor_parts.append(compress_text(continuity_notes, 40))
-    anchor_parts.append(f"整体风格保持{style_anchor}")
+        anchor_parts.append(compress_text(continuity_notes, 28))
+    anchor_parts.append(f"整体风格保持{compress_text(style_anchor, 42)}")
     simplified_blocks["anchor_block"] = "。".join(part for part in anchor_parts if part).rstrip("。") + "。"
 
     simplified_prompt = assemble_prompt(simplified_blocks)
@@ -280,10 +310,17 @@ def compress_prompt_blocks(blocks: dict[str, str], shot, asset_registry: AssetRe
         "以拼接图为首帧，前1秒内去除白底、分栏、标签并融入正常电影画面；"
         "若无法自然过渡，立刻短暂黑场后进入镜头，不要继续显示拼接图。"
     )
+    if is_multi_character_shot(shot):
+        simplified_blocks["transition_block"] += "不要保留并排角色设定图，主体必须同处一个真实场景镜头。"
     simplified_blocks["negative_block"] = (
-        "禁止持续显示拼接图、白底、标签、分栏边框、额外角色、服装年龄漂移、场景道具漂移；"
+        "禁止持续显示拼接图、白底、标签、分栏边框、角色设定图并排排版、服装年龄漂移、场景道具漂移；"
         "无法自然过渡时用短暂黑场替代。"
     )
+    if allows_anonymous_onlookers(shot):
+        simplified_blocks["negative_block"] = (
+            "禁止持续显示拼接图、白底、标签、分栏边框、角色设定图并排排版、抢戏的额外命名角色、"
+            "服装年龄漂移、场景道具漂移；无法自然过渡时用短暂黑场替代。"
+        )
     simplified_blocks["anchor_block"] = simplified_blocks["anchor_block"].replace("必须保持", "保持", 1)
 
     return simplified_blocks

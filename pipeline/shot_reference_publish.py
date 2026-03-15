@@ -50,12 +50,12 @@ def build_publish_relative_path(*, source_run: str, filename: str, url_prefix: s
     return Path(*parts)
 
 
-def build_public_url(*, public_base_url: str, relative_path: Path) -> str:
+def build_public_url(*, public_base_url: str, relative_path: Path, query: str = "") -> str:
     parsed = urlsplit(public_base_url)
     relative_posix = PurePosixPath(relative_path.as_posix())
     base_path = PurePosixPath(parsed.path or "/")
     full_path = (base_path / relative_posix).as_posix()
-    return urlunsplit((parsed.scheme, parsed.netloc, full_path, "", ""))
+    return urlunsplit((parsed.scheme, parsed.netloc, full_path, query, ""))
 
 
 def publish_shot_reference_boards(
@@ -91,11 +91,13 @@ def publish_shot_reference_boards(
         published_local_path = publish_root / relative_publish_path
         published_local_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, published_local_path)
+        cache_query = f"v={source_path.stat().st_mtime_ns}"
 
         board_payload = board.model_dump(mode="json")
         board_payload["board_public_url"] = build_public_url(
             public_base_url=normalized_base_url,
             relative_path=relative_publish_path,
+            query=cache_query,
         )
         boards_payload.append(board_payload)
         published_entries.append(

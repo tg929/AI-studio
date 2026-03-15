@@ -238,6 +238,8 @@ Current role:
 - Loads and validates `storyboard.json`
 - Resolves and validates the matching `shot_reference_manifest.json`, `asset_registry.json`, and `style_bible.json`
 - Assembles fixed 5-block video prompts from storyboard fields plus asset/style anchors
+- Uses a compression fallback that now preserves both primary character anchors for multi-character shots
+- Relaxes the negative block for crowd-reaction shots so anonymous background onlookers are allowed while extra named characters remain disallowed
 - Enforces prompt-length limits and first-frame URL readiness status
 - Writes `video_jobs.json`
 
@@ -247,7 +249,7 @@ Current role:
 
 - Loads and validates `shot_reference_manifest.json`
 - Publishes stitched board PNGs into a configured static directory
-- Writes `board_public_url` values using a configured public base URL
+- Writes `board_public_url` values using a configured public base URL plus a per-file version query
 - Records publish results for later video-job generation
 
 ### `pipeline/shot_videos.py`
