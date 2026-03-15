@@ -73,6 +73,7 @@ Required behavior:
 - Use one stitched shot board image plus one shot prompt
 - Preserve character/scene/prop consistency
 - Prevent the model from turning the board layout itself into the visible video format
+- If the stitched first frame cannot transition cleanly into the cinematic scene, prefer a very brief black-frame bridge over leaving the board visible
 
 ## Current Project-Specific Prompt Constraints
 

@@ -173,6 +173,8 @@ def build_prompt_blocks(shot, board, asset_registry: AssetRegistry, style_bible:
     transition_block = (
         "以提供的拼接图作为视频第1帧。开场前1秒内，从拼接首帧快速自然融入正常电影画面，"
         "去除白底、拼贴分栏、标签文字和设定板版式，只保留其中已绑定的人物、场景和道具，并把它们整合进真实空间。"
+        "如果无法自然完成这一过渡，则优先在极短时间内转为纯黑画面，再从黑场进入正常镜头，"
+        "不要让拼接图本身继续停留在可见画面中。"
     )
     single_take_block = "这是一个连续10秒的单镜头，不要切镜，不要分屏，不要让拼接板持续停留在视频里。"
 
@@ -208,7 +210,7 @@ def build_prompt_blocks(shot, board, asset_registry: AssetRegistry, style_bible:
 
     negative_block = (
         "禁止出现拼接板持续存在、白底、标签文字、分栏边框、UI感、额外未绑定角色、角色服装和年龄漂移、"
-        "场景结构漂移、道具替换、多镜头切换。"
+        "场景结构漂移、道具替换、多镜头切换。若无法自然过渡，宁可短暂黑场，也不要继续显示资产拼接图。"
     )
 
     return {
@@ -269,6 +271,20 @@ def compress_prompt_blocks(blocks: dict[str, str], shot, asset_registry: AssetRe
         anchor_parts.append(compress_text(continuity_notes, 40))
     anchor_parts.append(f"整体风格保持{style_anchor}")
     simplified_blocks["anchor_block"] = "。".join(part for part in anchor_parts if part).rstrip("。") + "。"
+
+    simplified_prompt = assemble_prompt(simplified_blocks)
+    if len(simplified_prompt) <= MAX_PROMPT_LENGTH:
+        return simplified_blocks
+
+    simplified_blocks["transition_block"] = (
+        "以拼接图为首帧，前1秒内去除白底、分栏、标签并融入正常电影画面；"
+        "若无法自然过渡，立刻短暂黑场后进入镜头，不要继续显示拼接图。"
+    )
+    simplified_blocks["negative_block"] = (
+        "禁止持续显示拼接图、白底、标签、分栏边框、额外角色、服装年龄漂移、场景道具漂移；"
+        "无法自然过渡时用短暂黑场替代。"
+    )
+    simplified_blocks["anchor_block"] = simplified_blocks["anchor_block"].replace("必须保持", "保持", 1)
 
     return simplified_blocks
 

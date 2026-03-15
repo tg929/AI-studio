@@ -17,6 +17,7 @@ Current baseline:
 
 - `run10` is the first end-to-end completed baseline run from script through final stitched video.
 - The current final output is `runs/run10/10_final/final_video.mp4`.
+- Final stitching now supports both leading trim and a short leading black-screen cover on every shot so residual first-frame board frames can be hidden deterministically.
 
 ## Default Input
 
@@ -43,6 +44,7 @@ Current baseline:
 - Asset images must include labels
 - Video model gets one stitched board image plus one shot prompt
 - Final video stitching trims the leading first-frame display window from each shot before concatenation
+- Final video stitching can also force a short leading black-screen cover on each processed shot before concatenation
 - JSON as the default inter-stage contract
 
 ## V1 Success Criteria

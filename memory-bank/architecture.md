@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-14
+Last updated: 2026-03-15
 
 ## Current Files
 
@@ -119,6 +119,7 @@ Current role:
 - CLI entrypoint for the final-video concatenation node
 - Reads a validated `shot_videos_manifest.json`
 - Concatenates succeeded shot videos into one final mp4
+- Exposes both leading-trim and leading-blackout controls for per-shot preprocessing
 - Generates `final_video_manifest.json`
 
 ### `publish_shot_reference_boards.py`
@@ -234,6 +235,7 @@ Current role:
 
 - Loads and validates `shot_videos_manifest.json`
 - Trims a configurable leading duration from each succeeded shot video before concat
+- Optionally covers a short leading duration of each processed shot with pure black after trimming
 - Builds an ffmpeg concat input list from the trimmed shot videos
 - Re-encodes and concatenates all shot videos into `final_video.mp4`
 - Writes `final_video_manifest.json`
@@ -299,6 +301,7 @@ Current role:
 Current role:
 
 - Defines the strict Pydantic schema for `final_video_manifest.json`
+- Records both `trim_leading_seconds` and `blackout_leading_seconds` inside the concat spec
 - Validates concat trim settings, per-shot source/trimmed inputs, final output path metadata, and sequential shot ordering
 
 ### `prompts/asset_extraction.py`

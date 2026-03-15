@@ -5,7 +5,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from pipeline.final_video import generate_final_video
+from pipeline.final_video import (
+    DEFAULT_BLACKOUT_LEADING_SECONDS,
+    DEFAULT_TRIM_LEADING_SECONDS,
+    generate_final_video,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,8 +24,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--trim-leading-seconds",
         type=float,
-        default=1.5,
-        help="Seconds to trim from the start of every shot video before concatenation. Default: 1.0",
+        default=DEFAULT_TRIM_LEADING_SECONDS,
+        help=(
+            "Seconds to trim from the start of every shot video before concatenation. "
+            f"Default: {DEFAULT_TRIM_LEADING_SECONDS}"
+        ),
+    )
+    parser.add_argument(
+        "--blackout-leading-seconds",
+        type=float,
+        default=DEFAULT_BLACKOUT_LEADING_SECONDS,
+        help=(
+            "Seconds to force to pure black at the start of every trimmed shot clip before "
+            f"concatenation. Default: {DEFAULT_BLACKOUT_LEADING_SECONDS}"
+        ),
     )
     return parser.parse_args()
 
@@ -35,6 +51,7 @@ def main() -> int:
     artifacts = generate_final_video(
         shot_videos_manifest_path=shot_videos_manifest_path,
         trim_leading_seconds=args.trim_leading_seconds,
+        blackout_leading_seconds=args.blackout_leading_seconds,
     )
     print(f"Run directory: {artifacts.run_dir}")
     print(f"Final video artifacts: {artifacts.final_dir}")

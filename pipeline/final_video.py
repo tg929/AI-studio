@@ -11,6 +11,7 @@ from schemas.final_video_manifest import FinalVideoManifest
 from schemas.shot_videos_manifest import ShotVideosManifest
 
 DEFAULT_TRIM_LEADING_SECONDS = 1.0
+DEFAULT_BLACKOUT_LEADING_SECONDS = 0.4
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,38 +51,35 @@ def shell_quote_for_ffmpeg(path: Path) -> str:
     return str(path).replace("'", "'\\''")
 
 
-def trim_video_clip(*, source_path: Path, output_path: Path, trim_leading_seconds: float) -> None:
-    if trim_leading_seconds <= 0:
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                str(source_path),
-                "-c:v",
-                "libx264",
-                "-c:a",
-                "aac",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                str(output_path),
-            ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        return
+def build_leading_blackout_filter(blackout_leading_seconds: float) -> str | None:
+    if blackout_leading_seconds <= 0:
+        return None
+    return (
+        "drawbox="
+        "x=0:y=0:w=iw:h=ih:"
+        "color=black:t=fill:"
+        f"enable=lt(t\\,{blackout_leading_seconds:.3f})"
+    )
 
-    subprocess.run(
+
+def trim_video_clip(
+    *,
+    source_path: Path,
+    output_path: Path,
+    trim_leading_seconds: float,
+    blackout_leading_seconds: float,
+) -> None:
+    command = ["ffmpeg", "-y"]
+    if trim_leading_seconds > 0:
+        command.extend(["-ss", f"{trim_leading_seconds:.3f}"])
+    command.extend(["-i", str(source_path)])
+
+    video_filter = build_leading_blackout_filter(blackout_leading_seconds)
+    if video_filter:
+        command.extend(["-vf", video_filter])
+
+    command.extend(
         [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            f"{trim_leading_seconds:.3f}",
-            "-i",
-            str(source_path),
             "-c:v",
             "libx264",
             "-c:a",
@@ -91,7 +89,10 @@ def trim_video_clip(*, source_path: Path, output_path: Path, trim_leading_second
             "-movflags",
             "+faststart",
             str(output_path),
-        ],
+        ]
+    )
+    subprocess.run(
+        command,
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -102,6 +103,7 @@ def generate_final_video(
     *,
     shot_videos_manifest_path: Path,
     trim_leading_seconds: float = DEFAULT_TRIM_LEADING_SECONDS,
+    blackout_leading_seconds: float = DEFAULT_BLACKOUT_LEADING_SECONDS,
 ) -> FinalVideoArtifacts:
     shot_videos = ShotVideosManifest.model_validate(read_json(shot_videos_manifest_path))
     run_dir = resolve_run_dir(shot_videos_manifest_path)
@@ -123,6 +125,7 @@ def generate_final_video(
             source_path=source_video_path.resolve(),
             output_path=trimmed_video_path,
             trim_leading_seconds=trim_leading_seconds,
+            blackout_leading_seconds=blackout_leading_seconds,
         )
         concat_lines.append(f"file '{shell_quote_for_ffmpeg(trimmed_video_path)}'")
         inputs_payload.append(
@@ -168,6 +171,7 @@ def generate_final_video(
             "concat_spec": {
                 "concat_mode": "ffmpeg_concat_demuxer_reencode",
                 "trim_leading_seconds": trim_leading_seconds,
+                "blackout_leading_seconds": blackout_leading_seconds,
                 "video_codec": "libx264",
                 "audio_codec": "aac",
                 "pixel_format": "yuv420p",

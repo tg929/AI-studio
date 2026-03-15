@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-03-14
+Last updated: 2026-03-15
 
 ## Completed
 
@@ -97,6 +97,23 @@ Last updated: 2026-03-14
 - Rebuilt `runs/run10/10_final/final_video.mp4` with this trim rule:
   - trimmed intermediates are saved under `runs/run10/10_final/trimmed/`
   - verified output is now about `54.35s`
+- Updated the `video_jobs` prompt assembly so video generation now includes a black-screen fallback rule:
+  - if the stitched first frame cannot naturally disappear, the model should briefly cut to black instead of continuing to display the asset board
+  - the regenerated `runs/run10/08_video_jobs/video_jobs.json` now contains this rule in both `transition_block` and `negative_block`
+- After adding the black-screen fallback rule, all 6 `run10` shot videos were regenerated from the updated `video_jobs.json`.
+- `run10/10_final/final_video.mp4` was then rebuilt from the regenerated shot videos with `trim_leading_seconds = 1.6`.
+- Current latest final-video baseline:
+  - file: `runs/run10/10_final/final_video.mp4`
+  - manifest: `runs/run10/10_final/final_video_manifest.json`
+  - verified output: `1280x720`, `24 fps`, about `50.79s`
+- Updated the final-video concat stage again so each processed shot can apply a short leading black-screen cover after trimming:
+  - new concat parameter: `blackout_leading_seconds`
+  - current default in code: `0.4s`
+  - intended use: hide any residual stitched-board frames that survive the trim window
+- Rebuilt `runs/run10/10_final/final_video.mp4` from the existing `run10` shot videos with:
+  - `trim_leading_seconds = 1.6`
+  - `blackout_leading_seconds = 0.4`
+  - sampled processed shots now start on pure black and return to normal content after the blackout window
 - Latest observation from `runs/run9`:
   - character sheets improved noticeably compared with earlier runs
   - character QR/color-strip contamination was reduced but not fully eliminated
@@ -137,6 +154,9 @@ The project now has:
 - Asset images are labeled
 - One stitched board image per shot is sent to the video model
 - Each shot is 10 seconds
+- The final concat stage now has two deterministic first-frame suppression controls:
+  - trim the leading portion of each shot
+  - optionally cover a short remaining leading portion with pure black before concatenation
 
 ## Notes
 

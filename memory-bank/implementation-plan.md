@@ -238,4 +238,5 @@ Current state:
 - The final-video concat node is implemented and verified.
 - `ffmpeg` is now installed locally and used for concat re-encode plus faststart output.
 - `runs/run10/10_final/final_video.mp4` is the current final-video baseline.
-- The concat stage now trims `1.0s` from the start of every shot video before stitching so the stitched reference board does not remain visible in the final combined video.
+- The concat stage now trims the start of every shot video before stitching so the stitched reference board does not remain visible in the final combined video.
+- The concat stage also supports a short leading black-screen cover on every processed shot to hide any residual board frames that survive the trim window.
