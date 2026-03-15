@@ -61,6 +61,11 @@ STORYBOARD_SYSTEM_PROMPT = """你是一名“AI漫剧分镜导演助理”。
 3. 可以写“围观人群、压迫氛围、议论声”等背景存在，但不要因为这些泛化背景去创建新的资产 ID。
 4. 若某个资产与剧情相关但不应出现在当前画面，可以保留在 `character_ids` / `prop_ids` 中，但不要放进 `visible_*`。
 5. 输出要优先服务后续拼接首帧：让程序能明确知道当前 shot 该放哪些资产图。
+6. `prop_ids` 允许比 covered segments 多出两类补充道具：
+   - 当前 `character_ids` 自带的 `signature_prop_ids`
+   - 当前 `primary_scene_id` 或 covered segments 场景里的 `default_prop_ids`
+7. 除上述两类补充道具外，不要给 shot 添加额外 prop。
+8. 如果补充道具不是当前画面的核心主体，不要放进 `visible_prop_ids`。
 
 ## 输出格式
 

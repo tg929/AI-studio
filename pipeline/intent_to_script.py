@@ -579,28 +579,58 @@ def normalize_intake_router_payload(
         "重写": "rewrite_for_asset_clarity",
         "资产清晰化重写": "rewrite_for_asset_clarity",
     }
+    path_to_primary_operation = {
+        "expand_then_extract": "expand",
+        "compress_then_extract": "compress",
+        "rewrite_then_extract": "rewrite_for_asset_clarity",
+        "direct_extract": "",
+        "confirm_then_continue": "",
+    }
+    primary_operation_to_path = {
+        "expand": "expand_then_extract",
+        "compress": "compress_then_extract",
+        "rewrite_for_asset_clarity": "rewrite_then_extract",
+    }
+
     operations = []
     for item in split_string_list(normalized.get("recommended_operations")):
         mapped = operation_map.get(item.strip().lower()) or operation_map.get(item.strip())
         if mapped:
             operations.append(mapped)
     operations = unique_preserve_order(operations)
-    if not operations:
-        operations = {
-            "expand_then_extract": ["expand"],
-            "compress_then_extract": ["compress"],
-            "rewrite_then_extract": ["rewrite_for_asset_clarity"],
-            "direct_extract": [],
-            "confirm_then_continue": [],
-        }[normalized["chosen_path"]]
+    chosen_path = normalized["chosen_path"]
+    expected_primary = path_to_primary_operation[chosen_path]
+    if chosen_path in {"direct_extract", "confirm_then_continue"}:
+        operations = []
+    elif not operations:
+        operations = [expected_primary]
+    elif expected_primary and expected_primary in operations:
+        operations = [expected_primary, *[item for item in operations if item != expected_primary]]
+    else:
+        inferred_path = primary_operation_to_path.get(operations[0])
+        if inferred_path:
+            normalized["chosen_path"] = inferred_path
+            chosen_path = inferred_path
+            expected_primary = path_to_primary_operation[chosen_path]
+            operations = [expected_primary, *[item for item in operations if item != expected_primary]]
     normalized["recommended_operations"] = operations[:2]
     normalized["reasons"] = split_string_list(normalized.get("reasons"))
     normalized["risks"] = split_string_list(normalized.get("risks"))
     normalized["missing_critical_info"] = split_string_list(normalized.get("missing_critical_info"))
-    normalized["needs_confirmation"] = normalize_bool(normalized.get("needs_confirmation")) or (
-        normalized["chosen_path"] == "confirm_then_continue"
-    )
-    normalized["confirmation_points"] = split_string_list(normalized.get("confirmation_points"))
+
+    raw_confirmation_points = split_string_list(normalized.get("confirmation_points"))
+    if normalized["chosen_path"] == "confirm_then_continue":
+        normalized["needs_confirmation"] = True
+        normalized["confirmation_points"] = (
+            raw_confirmation_points
+            or normalized["missing_critical_info"]
+            or normalized["risks"][:1]
+            or ["Confirm the upstream routing decision before continuing."]
+        )
+    else:
+        # Some model outputs keep stale confirmation flags even when a concrete path is chosen.
+        normalized["needs_confirmation"] = False
+        normalized["confirmation_points"] = []
     normalized["project_target"] = project_target
     return normalized
 
@@ -743,6 +773,42 @@ def normalize_asset_readiness_payload(
     return normalized
 
 
+def ensure_min_scene_visual_anchors(
+    scene_plan: list[dict[str, Any]],
+    beat_sheet: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    beat_anchor_map: dict[str, list[str]] = {}
+    for beat in beat_sheet:
+        if not isinstance(beat, dict):
+            continue
+        scene_name = str(beat.get("scene_name", "")).strip()
+        if not scene_name:
+            continue
+        beat_anchor_map.setdefault(scene_name, []).extend(split_string_list(beat.get("visual_anchors")))
+
+    normalized_scene_plan: list[dict[str, Any]] = []
+    for item in scene_plan:
+        record = dict(item)
+        scene_name = str(record.get("name", "")).strip()
+        anchors = unique_preserve_order(split_string_list(record.get("visual_anchors")))[:5]
+        fallback_candidates: list[str] = []
+        fallback_candidates.extend(beat_anchor_map.get(scene_name, []))
+        fallback_candidates.extend(split_string_list(scene_name))
+        fallback_candidates.extend(split_string_list(record.get("dramatic_use")))
+        if scene_name:
+            fallback_candidates.extend([f"{scene_name}环境氛围", f"{scene_name}空间边界"])
+        for candidate in fallback_candidates:
+            candidate = str(candidate).strip()
+            if not candidate or candidate in anchors:
+                continue
+            anchors.append(candidate)
+            if len(anchors) >= 3:
+                break
+        record["visual_anchors"] = anchors[:5]
+        normalized_scene_plan.append(record)
+    return normalized_scene_plan
+
+
 def normalize_story_blueprint_payload(payload: dict[str, Any], *, source_script_name: str) -> dict[str, Any]:
     normalized = dict(payload)
 
@@ -857,6 +923,7 @@ def normalize_story_blueprint_payload(payload: dict[str, Any], *, source_script_
         record["visual_anchors"] = unique_preserve_order(split_string_list(record.get("visual_anchors")))
         beat_sheet.append(record)
     normalized["beat_sheet"] = beat_sheet[:8]
+    normalized["scene_plan"] = ensure_min_scene_visual_anchors(normalized["scene_plan"], normalized["beat_sheet"])
 
     known_character_names = {
         str(item.get("name", "")).strip()

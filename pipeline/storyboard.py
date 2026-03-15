@@ -89,6 +89,7 @@ def build_storyboard_context(
                     "occupation_identity": item.occupation_identity,
                     "appearance_summary": item.appearance_summary,
                     "costume_summary": item.costume_summary,
+                    "signature_prop_ids": item.signature_prop_ids,
                     "must_keep_features": item.must_keep_features,
                     "required_features": item.visual_identity_lock.required_features,
                 }
@@ -99,6 +100,7 @@ def build_storyboard_context(
                     "id": item.id,
                     "name": item.name,
                     "environment_summary": item.environment_summary,
+                    "default_prop_ids": item.default_prop_ids,
                     "key_visual_elements": item.key_visual_elements,
                     "must_keep_features": item.must_keep_features,
                 }
@@ -310,6 +312,14 @@ def validate_storyboard_against_registry(storyboard: Storyboard, asset_registry:
     segment_id_order = [item.id for item in asset_registry.story_segments]
     segment_index_map = {segment_id: index for index, segment_id in enumerate(segment_id_order)}
     segment_map = {item.id: item for item in asset_registry.story_segments}
+    character_signature_prop_map = {
+        character.id: set(character.signature_prop_ids)
+        for character in asset_registry.characters
+    }
+    scene_default_prop_map = {
+        scene.id: set(scene.default_prop_ids)
+        for scene in asset_registry.scenes
+    }
 
     covered_segments: list[str] = []
     for shot in storyboard.shots:
@@ -334,6 +344,17 @@ def validate_storyboard_against_registry(storyboard: Storyboard, asset_registry:
         segment_prop_ids = {
             prop_id for segment_id in shot.segment_ids for prop_id in segment_map[segment_id].prop_ids
         }
+        character_signature_prop_ids = {
+            prop_id
+            for character_id in shot.character_ids
+            for prop_id in character_signature_prop_map.get(character_id, set())
+        }
+        scene_default_prop_ids = {
+            prop_id
+            for scene_id in {shot.primary_scene_id, *segment_scene_ids}
+            for prop_id in scene_default_prop_map.get(scene_id, set())
+        }
+        allowed_prop_ids = segment_prop_ids | character_signature_prop_ids | scene_default_prop_ids
 
         if shot.primary_scene_id not in segment_scene_ids:
             raise ValueError(
@@ -344,9 +365,12 @@ def validate_storyboard_against_registry(storyboard: Storyboard, asset_registry:
         if unknown_characters:
             raise ValueError(f"{shot.id} character_ids exceed covered segments: {unknown_characters}")
 
-        unknown_props = sorted(set(shot.prop_ids) - segment_prop_ids)
+        unknown_props = sorted(set(shot.prop_ids) - allowed_prop_ids)
         if unknown_props:
-            raise ValueError(f"{shot.id} prop_ids exceed covered segments: {unknown_props}")
+            raise ValueError(
+                f"{shot.id} prop_ids exceed allowed coverage "
+                f"(segments + character signature props + scene default props): {unknown_props}"
+            )
 
         unknown_visible_characters = sorted(set(shot.visible_character_ids) - set(shot.character_ids))
         if unknown_visible_characters:

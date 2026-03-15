@@ -88,10 +88,11 @@ class IntakeRouter(StrictModel):
             if tuple(self.recommended_operations) not in {
                 ("expand", "rewrite_for_asset_clarity"),
                 ("compress", "rewrite_for_asset_clarity"),
+                ("rewrite_for_asset_clarity", "compress"),
             }:
                 raise ValueError(
-                    "recommended_operations only supports expand+rewrite_for_asset_clarity or "
-                    "compress+rewrite_for_asset_clarity in V1"
+                    "recommended_operations only supports expand+rewrite_for_asset_clarity, "
+                    "compress+rewrite_for_asset_clarity, or rewrite_for_asset_clarity+compress in V1"
                 )
 
         return self

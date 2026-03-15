@@ -59,7 +59,8 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = """你是一名“AI漫剧短篇编剧”。
 2. 如果 `chosen_path` 是 `compress_then_extract`，你要在不丢失核心人物、场景、道具和事件链的前提下压缩为目标规格。
 3. 如果 `chosen_path` 是 `rewrite_then_extract`，你要在尽量保留原始故事事实的前提下重写为更利于资产提取的文本。
 4. `recommended_operations` 如果包含 `rewrite_for_asset_clarity`，说明你需要额外强化人物、场景、道具和视觉锚点的清晰度。
-5. 不要偏离用户原意，也不要发明超出蓝图的新核心设定。
+5. `recommended_operations` 如果包含 `compress`，即使主路径不是 `compress_then_extract`，你也要主动删减冗余说明和非必要 exposition，让文本更贴近 `target_script_length_chars`。
+6. 不要偏离用户原意，也不要发明超出蓝图的新核心设定。
 
 ## 结构要求
 

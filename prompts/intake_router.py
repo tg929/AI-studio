@@ -92,6 +92,12 @@ INTAKE_ROUTER_SYSTEM_PROMPT = """你是一名“AI漫剧输入路由导演助理
 - `compress`
 - `rewrite_for_asset_clarity`
 
+并且必须遵守以下顺序规则：
+- 第 1 个元素必须与 `chosen_path` 的主路径一致
+- 只有在确有必要时才添加第 2 个元素
+- 如果 `chosen_path` = `compress_then_extract` 且还需要提高清晰度，写成 `["compress", "rewrite_for_asset_clarity"]`
+- 如果 `chosen_path` = `rewrite_then_extract` 且还需要小幅压缩，写成 `["rewrite_for_asset_clarity", "compress"]`
+
 ## 路由规则
 
 1. 如果用户目标明确，优先服从用户目标，但要在 `risks` 中说明潜在问题。
