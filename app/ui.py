@@ -792,12 +792,6 @@ def build_console_html() -> str:
                 </select>
               </label>
             </div>
-            <label>Existing Run Dir
-              <input id="run_dir" placeholder="例如：runs/run16" />
-            </label>
-            <label>Source Path
-              <input id="source_path" placeholder="例如：01-陨落的天才.txt" />
-            </label>
             <label>Source Text
               <textarea id="source_text" placeholder="输入关键词、brief 或完整剧本。新建 run 时填这个，恢复旧 run 时可以留空。"></textarea>
             </label>
@@ -1439,8 +1433,8 @@ def build_console_html() -> str:
         source_script_name: document.getElementById('source_script_name').value,
         input_mode: document.getElementById('input_mode').value,
         execution_mode: document.getElementById('execution_mode').value,
-        run_dir: document.getElementById('run_dir').value,
-        source_path: document.getElementById('source_path').value,
+        run_dir: '',
+        source_path: '',
         source_text: document.getElementById('source_text').value,
         parallel_planning: document.getElementById('parallel_planning').value === 'true',
       };
