@@ -849,6 +849,89 @@ class WorkflowService:
             )
         return None
 
+    def _review_event_types_by_stage(self, run_dir: Path) -> dict[str, set[str]]:
+        event_types_by_stage: dict[str, set[str]] = {}
+        for event in self.read_events(run_dir, limit=0):
+            if not isinstance(event, dict):
+                continue
+            stage = str(event.get("stage", "")).strip()
+            event_type = str(event.get("event_type", "")).strip()
+            if not stage or not event_type:
+                continue
+            event_types_by_stage.setdefault(stage, set()).add(event_type)
+        return event_types_by_stage
+
+    def _bootstrap_legacy_reviews(self, run_dir: Path, *, source_script_name: str) -> bool:
+        reviews = ensure_reviews(run_dir)
+        event_types_by_stage = self._review_event_types_by_stage(run_dir)
+        changed = False
+
+        for review_stage in REVIEW_STAGE_ORDER:
+            review = reviews.reviews.get(review_stage)
+            if review is None or review.status != "pending":
+                continue
+            if review.reviewer.strip() or review.notes.strip() or review.metadata:
+                continue
+
+            checkpoint_stage = REVIEW_CHECKPOINT_STAGE[review_stage]
+            artifact_path = self.canonical_stage_artifact_path(run_dir, checkpoint_stage)
+            if not artifact_path.exists():
+                continue
+
+            event_types = event_types_by_stage.get(review_stage, set()) | event_types_by_stage.get(checkpoint_stage, set())
+            if {"review_reset", "review_updated", "review_auto_approved"} & event_types:
+                continue
+
+            metadata = {
+                "source": "legacy_review_bootstrap",
+                "auto_approved": True,
+                "checkpoint_stage": checkpoint_stage,
+                "checkpoint_artifact_path": str(artifact_path.resolve()),
+            }
+            update_review(
+                run_dir,
+                stage=review_stage,
+                status="approved",
+                reviewer="system",
+                notes="Recovered existing legacy checkpoint artifact during compatibility sync.",
+                metadata=metadata,
+            )
+
+            state = ensure_run_state(run_dir, source_script_name=source_script_name)
+            checkpoint_state = state.stages.get(checkpoint_stage)
+            if checkpoint_state is None or checkpoint_state.status != "succeeded" or state.awaiting_approval_stage == checkpoint_stage:
+                run_status = state.status
+                last_error = state.last_error
+                if state.awaiting_approval_stage == checkpoint_stage:
+                    run_status = self._active_run_status(run_dir)
+                    if "Awaiting operator approval" in last_error and f"`{review_stage}`" in last_error:
+                        last_error = ""
+                update_stage_state(
+                    run_dir,
+                    stage=checkpoint_stage,
+                    status="succeeded",
+                    message=f"Recovered legacy `{review_stage}` approval from existing artifact.",
+                    artifact_path=str(artifact_path.resolve()),
+                    metadata={"legacy_review_bootstrap": True},
+                    source_script_name=source_script_name,
+                    run_status=run_status,
+                    current_stage=state.current_stage or checkpoint_stage,
+                    last_error=last_error,
+                )
+
+            append_run_event(
+                run_dir,
+                event_type="review_auto_approved",
+                stage=review_stage,
+                message=f"Auto-approved legacy `{review_stage}` review from existing checkpoint artifact.",
+                data=metadata,
+            )
+            event_types_by_stage.setdefault(review_stage, set()).add("review_auto_approved")
+            event_types_by_stage.setdefault(checkpoint_stage, set()).add("review_auto_approved")
+            changed = True
+
+        return changed
+
     def sync_run_state(self, run_dir: Path, *, source_script_name: str = "") -> RunState:
         state = ensure_run_state(run_dir, source_script_name=source_script_name)
         ensure_reviews(run_dir)
@@ -888,6 +971,9 @@ class WorkflowService:
 
         if changed:
             write_run_state(run_dir, state)
+
+        if self._bootstrap_legacy_reviews(run_dir, source_script_name=effective_source_name):
+            state = ensure_run_state(run_dir, source_script_name=effective_source_name)
         return state
 
     def inspect_run(self, run_dir: Path | str) -> dict[str, Any]:

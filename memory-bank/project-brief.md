@@ -32,9 +32,14 @@ Current baseline:
 - A shared workflow service plus persisted run-state layer now sits underneath the CLI and VeADK tools as the foundation for that UI.
 - The first local operator-console skeleton now exists with FastAPI endpoints, background task execution, and review-oriented run detail panels.
 - The first operator approval gates are now active: downstream execution stops at `upstream`, `asset_images`, and `storyboard` until the stored review state is approved.
+- Legacy runs that already contain checkpoint artifacts now auto-bootstrap those checkpoint reviews to `approved` during compatibility sync so old `runN` directories can resume without being misclassified as blocked by newly added gates.
 - The project now also has a unified local CLI entrypoint `run_workflow.py` for terminal-based end-to-end execution and resume.
 - Upstream intake-router normalization now repairs path / operation-order mismatches before schema validation.
 - Storyboard prop coverage now treats character signature props and scene default props as valid carry-over assets.
+- Current top visual-quality priority is consistency:
+  - all characters in one script should share one coherent project-level style
+  - scenes should remain the same place without drifting into crowd plates or diagrams
+  - props should stay object-only without human scale references or category drift
 
 ## Default Input
 

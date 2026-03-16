@@ -474,6 +474,9 @@ def main() -> int:
     start_status = str(start_result.get("status", ""))
     if start_status != "ok":
         message = str(start_result.get("reason") or start_result.get("message") or "unknown workflow error")
+        if start_status == "awaiting_approval":
+            print(f"[awaiting_approval] upstream: {message}", file=sys.stderr)
+            return 2
         prefix = "blocked" if start_status == "blocked" else "failed"
         print(f"[{prefix}] upstream: {message}", file=sys.stderr)
         return 2 if start_status == "blocked" else 1
@@ -516,6 +519,9 @@ def main() -> int:
         status = str(result.get("status", ""))
         if status != "ok":
             message = str(result.get("reason") or result.get("message") or "unknown workflow error")
+            if status == "awaiting_approval":
+                print(f"[awaiting_approval] {stage}: {message}", file=sys.stderr)
+                return 2
             prefix = "blocked" if status == "blocked" else "failed"
             print(f"[{prefix}] {stage}: {message}", file=sys.stderr)
             return 2 if status == "blocked" else 1

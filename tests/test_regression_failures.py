@@ -146,6 +146,16 @@ class WorkflowReviewGateTests(unittest.TestCase):
             },
         )
 
+    def fake_generate_storyboard(self, *, style_bible_path: Path, model_config: object) -> None:
+        storyboard_path = style_bible_path.parent.parent / "06_storyboard" / "storyboard.json"
+        self.write_json(
+            storyboard_path,
+            {
+                "source_run": style_bible_path.parent.parent.name,
+                "shots": [],
+            },
+        )
+
     def test_review_gate_blocks_storyboard_until_asset_images_is_approved(self) -> None:
         self.service.submit_review(self.run_dir, stage="upstream", status="approved")
 
@@ -190,6 +200,37 @@ class WorkflowReviewGateTests(unittest.TestCase):
         self.assertEqual(run_state["status"], "running")
         self.assertEqual(run_state["awaiting_approval_stage"], "")
         self.assertEqual(run_state["stages"]["asset_images"]["status"], "succeeded")
+
+    def test_resume_auto_approves_legacy_checkpoint_reviews_from_existing_artifacts(self) -> None:
+        (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "01_input" / "script_clean.txt").write_text("legacy script", encoding="utf-8")
+        self.write_json(self.run_dir / "02_assets" / "asset_registry.json", {"items": []})
+        self.write_json(self.run_dir / "03_style" / "style_bible.json", {"style": "legacy"})
+        self.write_json(self.run_dir / "04_asset_prompts" / "asset_prompts.json", {"items": []})
+        self.write_json(
+            self.run_dir / "05_asset_images" / "asset_images_manifest.json",
+            {
+                "source_run": self.run_dir.name,
+                "characters": [],
+                "scenes": [],
+                "props": [],
+            },
+        )
+
+        start_result = self.service.start_or_resume(run_dir=str(self.run_dir))
+
+        self.assertEqual(start_result["status"], "ok")
+        reviews = self.service.list_reviews(self.run_dir)["reviews"]
+        self.assertEqual(reviews["upstream"]["status"], "approved")
+        self.assertEqual(reviews["asset_images"]["status"], "approved")
+        self.assertEqual(reviews["storyboard"]["status"], "pending")
+
+        with mock.patch("app.workflow_service.generate_storyboard", side_effect=self.fake_generate_storyboard):
+            result = self.service.run_stage("storyboard", run_dir=self.run_dir)
+
+        self.assertEqual(result["status"], "ok")
+        storyboard_review = self.service.get_review(self.run_dir, "storyboard")["review"]
+        self.assertEqual(storyboard_review["status"], "pending")
 
 
 class WorkflowReviewPayloadTests(unittest.TestCase):
