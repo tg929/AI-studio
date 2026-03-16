@@ -4,6 +4,14 @@ Last updated: 2026-03-16
 
 ## Completed
 
+- Added `run_full_experiment.py` as a wrapper CLI that runs the full workflow to `final_video` and auto-approves the current `upstream` / `asset_images` / `storyboard` review checkpoints for local batch experiments.
+- Rolled back the experimental consistency-tuning stack after `runs/run17` showed no material end-to-end quality gain; the baseline asset-prompt, asset-image, and video-job assembly paths are active again.
+- Added legacy review bootstrap for checkpoint-gated runs:
+  - existing `runN` directories with checkpoint artifacts but no real review history now auto-approve the matching `upstream` / `asset_images` / `storyboard` reviews during workflow-state sync
+  - verified `runs/run1` now resumes through reused `asset_extraction` / `style_bible` / `asset_prompts` / `asset_images` instead of stopping on a false `upstream` approval gate
+- Updated `run_workflow.py` CLI status output so `awaiting_approval` is reported explicitly instead of being shown as `failed`.
+- Added a regression test covering legacy checkpoint-review recovery during resume.
+
 - Initialized the local Python AgentKit project.
 - Prepared `.venv` and installed required Python packages.
 - Added a simple AgentKit app entry in `simple_agent.py`.

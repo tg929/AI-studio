@@ -41,6 +41,7 @@ Current role:
 - Shared orchestration layer for CLI, VeADK, and the upcoming custom operator UI
 - Owns start-or-resume behavior for new input or existing `runN`
 - Owns per-stage execution, mainline execution, artifact snapshotting, and board-publish strategy selection
+- Auto-bootstraps legacy checkpoint reviews to `approved` when an older run already has the checkpoint artifact but no real review history, so compatibility resumes do not get stuck on newly introduced gates
 - Persists stage outcomes through the run-state helpers
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
 - Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
@@ -102,6 +103,15 @@ Current role:
 - Local uvicorn entrypoint for the operator console
 - Boots the combined API + UI shell on `127.0.0.1:8188`
 
+### `run_full_experiment.py`
+
+Current role:
+
+- Local wrapper CLI for unattended end-to-end experiments
+- Calls `WorkflowService.run_mainline(...)`
+- Automatically approves the current `upstream`, `asset_images`, and `storyboard` review checkpoints when the workflow pauses on them
+- Continues the same `runN` until `final_video` or the first real failure
+
 ### `ai_studio_flow/__init__.py`
 
 Current role:
@@ -132,6 +142,7 @@ Current role:
 - Unified local CLI entrypoint for the current script-to-video workflow
 - Thin wrapper over `app/workflow_service.py`
 - Supports both fresh-input execution and resume-from-`runN` execution
+- Reports `awaiting_approval` distinctly from hard failures so terminal operators can tell review gates from real execution errors
 - Reads stage results from the shared service instead of duplicating orchestration logic
 
 ### `pipeline/runtime.py`
