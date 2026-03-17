@@ -92,7 +92,7 @@ Current role:
 Current role:
 
 - Serves the first operator-console HTML shell on top of the FastAPI app
-- Renders run list, run detail, task list, artifact list, and the first review panels
+- Renders run list, run detail, task list, and the first review panels
 - Displays upstream review data, asset-image galleries, and storyboard shot summaries
 - Surfaces the current `awaiting_approval_stage` directly in the run detail header
 - Adds richer operator review interactions for `asset_images` and `storyboard`, including filters, search, lightbox preview, shot navigation, and reference-asset inspection

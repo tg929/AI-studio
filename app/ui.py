@@ -1537,9 +1537,8 @@ def build_console_html() -> str:
     }
 
     async function loadRunDetail(runId) {
-      const [runPayload, artifactPayload, eventPayload, taskPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
+      const [runPayload, eventPayload, taskPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
         api(`/api/runs/${runId}`),
-        api(`/api/runs/${runId}/artifacts`),
         api(`/api/runs/${runId}/events?limit=30`),
         api(`/api/runs/${runId}/tasks?limit=12`),
         safeApi(`/api/runs/${runId}/videos`),
@@ -1553,7 +1552,6 @@ def build_console_html() -> str:
       const routeDecision = runPayload.route_decision || {};
       const stages = runState.stages || {};
       const stageOrder = runState.stage_order || [];
-      const artifacts = artifactPayload.artifacts || [];
       const events = (eventPayload.events || []).slice().reverse();
       const tasks = taskPayload.tasks || [];
       const reviewSummary = reviewsPayload?.reviews?.reviews || {};
@@ -1572,19 +1570,6 @@ def build_console_html() -> str:
           </div>
         `;
       }).join('');
-
-      const artifactRows = artifacts.filter(item => item.exists).map(item => `
-        <div class="artifact-row">
-          <div class="meta-line">
-            <strong>${item.key}</strong>
-            <span class="tag">${item.kind}</span>
-          </div>
-          <div class="code">${item.path}</div>
-          <div style="margin-top:8px">
-            ${item.preview_url ? `<a href="${item.preview_url}" target="_blank" rel="noopener noreferrer">open artifact</a>` : ''}
-          </div>
-        </div>
-      `).join('') || '<div class="empty">暂无可展示产物。</div>';
 
       const eventRows = events.map(event => `
         <div class="event-row">
@@ -1667,11 +1652,6 @@ def build_console_html() -> str:
         <section class="panel" style="padding:16px">
           <h2>Tasks</h2>
           <div class="task-list">${taskRows}</div>
-        </section>
-
-        <section class="panel" style="padding:16px">
-          <h2>Artifacts</h2>
-          <div class="artifact-list">${artifactRows}</div>
         </section>
 
         <section class="panel" style="padding:16px">
