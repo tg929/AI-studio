@@ -200,7 +200,11 @@ def build_jobs_payload(asset_prompts: AssetPrompts) -> dict[str, list[dict[str, 
                 "name": item.name,
                 "label_text": item.label_text,
                 "requested_size": SIZE_BY_ASPECT_RATIO[item.aspect_ratio],
-                "render_prompt": build_character_render_prompt(item),
+                "render_prompt": build_character_render_prompt(
+                    item,
+                    visual_style=asset_prompts.visual_style,
+                    consistency_anchors=asset_prompts.consistency_anchors,
+                ),
             }
             for item in asset_prompts.characters
         ],
@@ -210,7 +214,11 @@ def build_jobs_payload(asset_prompts: AssetPrompts) -> dict[str, list[dict[str, 
                 "name": item.name,
                 "label_text": item.label_text,
                 "requested_size": SIZE_BY_ASPECT_RATIO[item.aspect_ratio],
-                "render_prompt": build_scene_render_prompt(item),
+                "render_prompt": build_scene_render_prompt(
+                    item,
+                    visual_style=asset_prompts.visual_style,
+                    consistency_anchors=asset_prompts.consistency_anchors,
+                ),
             }
             for item in asset_prompts.scenes
         ],
@@ -220,7 +228,11 @@ def build_jobs_payload(asset_prompts: AssetPrompts) -> dict[str, list[dict[str, 
                 "name": item.name,
                 "label_text": item.label_text,
                 "requested_size": SIZE_BY_ASPECT_RATIO[item.aspect_ratio],
-                "render_prompt": build_prop_render_prompt(item),
+                "render_prompt": build_prop_render_prompt(
+                    item,
+                    visual_style=asset_prompts.visual_style,
+                    consistency_anchors=asset_prompts.consistency_anchors,
+                ),
             }
             for item in asset_prompts.props
         ],

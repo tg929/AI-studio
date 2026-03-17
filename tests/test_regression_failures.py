@@ -8,8 +8,12 @@ from types import SimpleNamespace
 from unittest import mock
 
 from app.workflow_service import WorkflowService
+from pipeline.asset_images import build_jobs_payload
 from pipeline.intent_to_script import normalize_intake_router_payload, read_json_string as read_stage_json_string
 from pipeline.storyboard import normalize_storyboard_payload, validate_storyboard_against_registry
+from prompts.asset_prompts import ASSET_PROMPTS_SYSTEM_PROMPT
+from prompts.style_bible import STYLE_BIBLE_SYSTEM_PROMPT
+from schemas.asset_prompts import AssetPrompts
 from schemas.asset_registry import AssetRegistry
 from schemas.intake_router import IntakeRouter
 from schemas.storyboard import Storyboard
@@ -108,6 +112,92 @@ class RegressionFailureTests(unittest.TestCase):
 
         self.assertTrue(payload["needs_confirmation"])
         self.assertEqual(payload["confirmation_points"], ["confirm target length"])
+
+
+class AssetImagePromptAssemblyTests(unittest.TestCase):
+    def test_render_prompts_frontload_asset_specific_subject_and_project_style(self) -> None:
+        asset_prompts = AssetPrompts.model_validate(
+            {
+                "schema_version": "1.0",
+                "source_script_name": "custom_input",
+                "title": "霓虹疑案",
+                "visual_style": "近未来霓虹都市悬疑动漫设定风，冷色雨夜，写实材质。",
+                "consistency_anchors": "蓝绿色霓虹倒影，潮湿柏油路，统一冷调高反差。",
+                "characters": [
+                    {
+                        "id": "char_001",
+                        "name": "林雾",
+                        "label_text": "[林雾 人物参考]",
+                        "prompt": "短发女侦探，深灰风衣，右眼下有细小伤痕，持旧式录音笔。",
+                        "negative_prompt": "watermark, text",
+                        "aspect_ratio": "16:9",
+                        "framing": "Single-character reference sheet with a half-body to three-quarter portrait emphasis.",
+                        "background_treatment": "Clean light background, centered subject, reserved bottom label area.",
+                        "generation_intent": "Character consistency reference sheet for downstream storyboard and video generation.",
+                        "card_layout_notes": "Label language: zh-CN.",
+                    }
+                ],
+                "scenes": [
+                    {
+                        "id": "scene_001",
+                        "name": "高架桥下雨夜街口",
+                        "label_text": "[高架桥下雨夜街口 场景参考]",
+                        "prompt": "高架桥阴影下的十字街口，潮湿柏油路面映出蓝绿色霓虹，远处便利店招牌虚化。",
+                        "negative_prompt": "person, watermark",
+                        "aspect_ratio": "16:9",
+                        "framing": "Wide environment reference sheet.",
+                        "figure_policy": "no_identifiable_characters",
+                        "generation_intent": "Environment consistency reference sheet for downstream storyboard and video generation.",
+                        "card_layout_notes": "Label language: zh-CN.",
+                    }
+                ],
+                "props": [
+                    {
+                        "id": "prop_001",
+                        "name": "旧式录音笔",
+                        "label_text": "[旧式录音笔 道具参考]",
+                        "prompt": "银黑双色旧式录音笔，磨损金属边框，按键凹陷，细长机身。",
+                        "negative_prompt": "text, watermark",
+                        "aspect_ratio": "16:9",
+                        "framing": "Centered single-prop reference sheet.",
+                        "isolation_rules": "Show only the single prop subject, with no people, hands, wearer, or extra same-category objects.",
+                        "generation_intent": "Prop consistency reference sheet for downstream storyboard and video generation.",
+                        "card_layout_notes": "Label language: zh-CN.",
+                    }
+                ],
+            }
+        )
+
+        jobs = build_jobs_payload(asset_prompts)
+        character_prompt = jobs["characters"][0]["render_prompt"]
+        scene_prompt = jobs["scenes"][0]["render_prompt"]
+        prop_prompt = jobs["props"][0]["render_prompt"]
+
+        for prompt in (character_prompt, scene_prompt, prop_prompt):
+            self.assertIn("项目统一美术风格：近未来霓虹都市悬疑动漫设定风，冷色雨夜，写实材质。", prompt)
+            self.assertIn("统一一致性锚点：蓝绿色霓虹倒影，潮湿柏油路，统一冷调高反差。", prompt)
+            self.assertNotIn("精致国风玄幻手绘漫风", prompt)
+
+        self.assertIn("人物主体设定：短发女侦探，深灰风衣，右眼下有细小伤痕，持旧式录音笔。", character_prompt)
+        self.assertLess(character_prompt.index("人物主体设定："), character_prompt.index("版式固定："))
+
+        self.assertIn("场景主体设定：高架桥阴影下的十字街口，潮湿柏油路面映出蓝绿色霓虹，远处便利店招牌虚化。", scene_prompt)
+        self.assertLess(scene_prompt.index("场景主体设定："), scene_prompt.index("版式固定："))
+
+        self.assertIn("道具主体设定：银黑双色旧式录音笔，磨损金属边框，按键凹陷，细长机身。", prop_prompt)
+        self.assertLess(prop_prompt.index("道具主体设定："), prop_prompt.index("版式固定："))
+
+
+class PromptTemplateBiasTests(unittest.TestCase):
+    def test_asset_prompt_system_prompt_does_not_force_fantasy_project_world(self) -> None:
+        self.assertNotIn("同一个东方玄幻项目世界", ASSET_PROMPTS_SYSTEM_PROMPT)
+        self.assertNotIn("精致国风玄幻人物设定图", ASSET_PROMPTS_SYSTEM_PROMPT)
+        self.assertIn("同一个项目世界", ASSET_PROMPTS_SYSTEM_PROMPT)
+
+    def test_style_bible_system_prompt_does_not_force_guofeng_fantasy(self) -> None:
+        self.assertNotIn("当前项目优先朝以下审美方向收敛：\n- 国风玄幻", STYLE_BIBLE_SYSTEM_PROMPT)
+        self.assertIn("不得无依据地固定为某一种题材或时代", STYLE_BIBLE_SYSTEM_PROMPT)
+        self.assertIn("以故事题材、时代、世界设定和角色身份为第一依据", STYLE_BIBLE_SYSTEM_PROMPT)
 
 
 class WorkflowReviewGateTests(unittest.TestCase):

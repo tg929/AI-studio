@@ -1,9 +1,15 @@
 # Progress
 
-Last updated: 2026-03-16
+Last updated: 2026-03-17
 
 ## Completed
 
+- Fixed an asset-image prompt-composition regression that was flattening different inputs toward the same reference-board look:
+  - removed hard-coded `东方玄幻 / 国风玄幻` genre bias from the `style_bible` and `asset_prompts` system prompts so project style now follows the actual source material
+  - removed the hard-coded shared `精致国风玄幻手绘漫风` render-template bias from the final image-stage prompt builders
+  - now front-load each asset's own subject description before layout instructions
+  - now inject project-level `visual_style` and `consistency_anchors` into the final image render prompt for characters, scenes, and props
+  - added regression tests that fail if fixed fantasy-world wording or missing asset/style anchors reappear in the prompt stack
 - Added `run_full_experiment.py` as a wrapper CLI that runs the full workflow to `final_video` and auto-approves the current `upstream` / `asset_images` / `storyboard` review checkpoints for local batch experiments.
 - Rolled back the experimental consistency-tuning stack after `runs/run17` showed no material end-to-end quality gain; the baseline asset-prompt, asset-image, and video-job assembly paths are active again.
 - Added legacy review bootstrap for checkpoint-gated runs:

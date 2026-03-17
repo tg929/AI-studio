@@ -346,6 +346,7 @@ Current role:
 
 - Loads and validates `asset_prompts.json`
 - Builds image-generation jobs per asset
+- Injects project-level `visual_style` and `consistency_anchors` into every final image-stage render prompt
 - Calls the image model for each character / scene / prop asset
 - Downloads raw images from signed URLs using `curl`
 - Adds stable local Chinese labels onto the final asset cards
@@ -525,12 +526,14 @@ Current role:
 Current role:
 
 - Stores the production prompt template for style-bible generation
+- Derives project style from `asset_registry.json` instead of hard-coding one preferred genre template
 
 ### `prompts/asset_prompts.py`
 
 Current role:
 
 - Stores the production prompt template for text-model generation of asset image prompts
+- Treats project genre and world style as source-derived inputs instead of forcing a fixed `东方玄幻` world
 - Targets reference-board style outputs rather than ordinary single illustrations
 
 ### `prompts/asset_images.py`
@@ -538,6 +541,7 @@ Current role:
 Current role:
 
 - Builds deterministic image-generation prompts for reference-board layouts
+- Front-loads asset-specific subject descriptions before the shared layout instructions so different scripts do not collapse into the same generic board prompt
 - Leaves final text labels to local rendering instead of model-rendered text
 
 ### `prompts/storyboard.py`
