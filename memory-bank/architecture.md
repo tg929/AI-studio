@@ -46,6 +46,7 @@ Current role:
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
 - Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
 - Builds stage-aware preview headlines and truncated content summaries from existing workflow artifacts so stage cards can show content instead of raw file paths
+- Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
 - Keeps the existing pipeline modules as the stage implementation boundary
 
 ### `app/run_state.py`
@@ -98,6 +99,7 @@ Current role:
 - Displays shot-video cards and the final stitched video directly inside the run detail page
 - Defaults new runs to `input_mode=auto` so source classification is delegated to upstream routing instead of the operator manually selecting an input type
 - Renders stage cards with preview headlines and truncated content summaries instead of filesystem paths
+- Renders a `Route Decision` panel above stages so upstream source classification, chosen path, and operator-facing risks are visible without opening raw JSON
 
 ### `run_operator_console.py`
 

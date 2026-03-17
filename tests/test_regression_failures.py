@@ -328,6 +328,17 @@ class WorkflowStagePreviewTests(unittest.TestCase):
         self.assertEqual(storyboard_stage["preview_headline"], "正式分镜 6 条")
         self.assertIn("shot_001", storyboard_stage["preview_text"])
 
+    def test_inspect_run_exposes_route_decision_summary(self) -> None:
+        service = WorkflowService(output_root=PROJECT_ROOT / "runs", env_file=None)
+
+        payload = service.inspect_run(PROJECT_ROOT / "runs" / "run17")["route_decision"]
+
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["source_kind"], "full_script")
+        self.assertEqual(payload["chosen_path"], "compress_then_extract")
+        self.assertEqual(payload["project_target"]["target_shot_count"], 6)
+        self.assertIn("压缩适配6个10秒镜头", payload["reasoning_summary"])
+
 
 if __name__ == "__main__":
     unittest.main()

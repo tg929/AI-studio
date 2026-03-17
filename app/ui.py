@@ -934,6 +934,69 @@ def build_console_html() -> str:
       `;
     }
 
+    function renderRouteDecisionPanel(routeDecision) {
+      if (!routeDecision || !routeDecision.available) {
+        return `
+          <section class="panel" style="padding:16px">
+            <h2>Route Decision</h2>
+            <div class="empty" style="margin-top:14px">当前 run 还没有可展示的 route decision。</div>
+          </section>
+        `;
+      }
+
+      const projectTarget = routeDecision.project_target || {};
+      const recommendedOperations = Array.isArray(routeDecision.recommended_operations) ? routeDecision.recommended_operations : [];
+      const risks = Array.isArray(routeDecision.risks) ? routeDecision.risks : [];
+      const missingInfo = Array.isArray(routeDecision.missing_critical_info) ? routeDecision.missing_critical_info : [];
+      const confirmationPoints = Array.isArray(routeDecision.confirmation_points) ? routeDecision.confirmation_points : [];
+
+      return `
+        <section class="panel" style="padding:16px; margin-top:18px">
+          <h2>Route Decision</h2>
+          <div class="summary-grid">
+            ${renderSummaryBox('source_kind', routeDecision.source_kind)}
+            ${renderSummaryBox('material_state', routeDecision.material_state)}
+            ${renderSummaryBox('chosen_path', routeDecision.chosen_path)}
+            ${renderSummaryBox('asset_readiness', routeDecision.asset_readiness_estimate)}
+            ${renderSummaryBox('target_runtime_sec', projectTarget.target_runtime_sec || 'N/A')}
+            ${renderSummaryBox('target_shot_count', projectTarget.target_shot_count || 'N/A')}
+          </div>
+          <div class="stack" style="margin-top:14px">
+            <div class="summary-box">
+              <strong>Reasoning Summary</strong>
+              <div class="muted">${escapeHtml(routeDecision.reasoning_summary || 'No reasoning summary.')}</div>
+            </div>
+            <div class="summary-box">
+              <strong>Recommended Operations</strong>
+              <div class="muted">${escapeHtml(recommendedOperations.join(' / ') || 'None')}</div>
+            </div>
+            ${routeDecision.needs_confirmation ? `
+              <div class="summary-box">
+                <strong>Confirmation Points</strong>
+                <div class="muted">${escapeHtml(confirmationPoints.join(' / ') || 'Operator confirmation required')}</div>
+              </div>
+            ` : ''}
+            ${risks.length ? `
+              <div class="summary-box">
+                <strong>Risks</strong>
+                <div class="note-list">
+                  ${risks.slice(0, 3).map(item => `<div class="note-item">${escapeHtml(item)}</div>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+            ${missingInfo.length ? `
+              <div class="summary-box">
+                <strong>Missing Critical Info</strong>
+                <div class="note-list">
+                  ${missingInfo.slice(0, 3).map(item => `<div class="note-item">${escapeHtml(item)}</div>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </section>
+      `;
+    }
+
     function renderUpstreamReview(reviewPayload) {
       const payload = reviewPayload?.payload || {};
       const summary = payload.summary || {};
@@ -1487,6 +1550,7 @@ def build_console_html() -> str:
       ]);
 
       const runState = runPayload.run_state || {};
+      const routeDecision = runPayload.route_decision || {};
       const stages = runState.stages || {};
       const stageOrder = runState.stage_order || [];
       const artifacts = artifactPayload.artifacts || [];
@@ -1580,7 +1644,9 @@ def build_console_html() -> str:
           </div>
         </div>
 
-        <section class="panel" style="padding:16px; margin-top:18px">
+        ${renderRouteDecisionPanel(routeDecision)}
+
+        <section class="panel" style="padding:16px">
           <h2>Stages</h2>
           <div class="stage-grid">${stageCards}</div>
         </section>

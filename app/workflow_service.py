@@ -432,6 +432,49 @@ class WorkflowService:
             "preview_truncated": preview_truncated,
         }
 
+    def build_route_decision_summary(self, run_dir: Path) -> dict[str, Any]:
+        source_context = self._read_json_if_exists(run_dir / "00_source" / "source_context.json")
+        intake_router = self._read_json_if_exists(run_dir / "00_source" / "intake_router.json")
+        if not source_context and not intake_router:
+            return {"available": False}
+
+        reasons = intake_router.get("reasons", []) if isinstance(intake_router.get("reasons"), list) else []
+        risks = intake_router.get("risks", []) if isinstance(intake_router.get("risks"), list) else []
+        missing_info = (
+            intake_router.get("missing_critical_info", [])
+            if isinstance(intake_router.get("missing_critical_info"), list)
+            else []
+        )
+        project_target = intake_router.get("project_target")
+        if not isinstance(project_target, dict):
+            project_target = source_context.get("project_target", {}) if isinstance(source_context.get("project_target"), dict) else {}
+
+        return {
+            "available": True,
+            "requested_input_mode": str(source_context.get("requested_input_mode", "")).strip() or "auto",
+            "fallback_input_mode": str(source_context.get("fallback_input_mode", "")).strip() or "unknown",
+            "source_kind": str(intake_router.get("source_form", "")).strip() or "unknown",
+            "material_state": str(intake_router.get("material_state", "")).strip() or "unknown",
+            "chosen_path": str(intake_router.get("chosen_path", "")).strip() or "pending",
+            "asset_readiness_estimate": str(intake_router.get("asset_readiness_estimate", "")).strip() or "unknown",
+            "recommended_operations": intake_router.get("recommended_operations", [])
+            if isinstance(intake_router.get("recommended_operations"), list)
+            else [],
+            "needs_confirmation": bool(intake_router.get("needs_confirmation", False)),
+            "confirmation_points": intake_router.get("confirmation_points", [])
+            if isinstance(intake_router.get("confirmation_points"), list)
+            else [],
+            "reasoning_summary": " / ".join(str(reason).strip() for reason in reasons[:2] if str(reason).strip()),
+            "risks": [str(risk).strip() for risk in risks if str(risk).strip()],
+            "missing_critical_info": [str(item).strip() for item in missing_info if str(item).strip()],
+            "project_target": {
+                "target_runtime_sec": project_target.get("target_runtime_sec", ""),
+                "target_shot_count": project_target.get("target_shot_count", ""),
+                "target_script_length_chars": project_target.get("target_script_length_chars", ""),
+                "shot_duration_sec": project_target.get("shot_duration_sec", ""),
+            },
+        }
+
     @staticmethod
     def _run_git(args: list[str], repo_root: Path) -> str:
         completed = subprocess.run(
@@ -1164,6 +1207,7 @@ class WorkflowService:
             "run_dir": str(resolved_run_dir),
             "artifacts": self.artifact_snapshot(resolved_run_dir),
             "run_state": run_state_payload,
+            "route_decision": self.build_route_decision_summary(resolved_run_dir),
         }
 
     def list_runs(self, *, limit: int = 50) -> list[dict[str, Any]]:

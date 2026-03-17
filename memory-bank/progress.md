@@ -194,6 +194,7 @@ Last updated: 2026-03-16
 - Adjusted the operator-console video layout so `Shot Videos` appears above `Final Video`, and paused automatic run-detail polling while any console video is actively playing or the media modal is open so local playback previews no longer get interrupted by DOM re-rendering.
 - Upgraded operator-console stage cards from raw artifact-path display to stage-aware content previews generated in the shared workflow service, so cards now summarize extracted assets, style direction, prompt content, storyboard shots, and downstream media progress directly from artifacts.
 - Removed the explicit `input_mode` selector from the operator-console create form; new UI launches now default to `input_mode=auto` so upstream routing owns input-type classification instead of the operator manually selecting it.
+- Added a `Route Decision` summary panel to the operator console run detail so the operator can see how upstream routing classified the input, which path it chose, what target constraints it inferred, and what risks / missing information were flagged.
 
 ## Current Phase
 
