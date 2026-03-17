@@ -10,6 +10,10 @@ Last updated: 2026-03-17
   - now front-load each asset's own subject description before layout instructions
   - now inject project-level `visual_style` and `consistency_anchors` into the final image render prompt for characters, scenes, and props
   - added regression tests that fail if fixed fantasy-world wording or missing asset/style anchors reappear in the prompt stack
+- Added a first automatic fallback for Volcano image moderation blocks in `asset_images`:
+  - when the image API returns `OutputImageSensitiveContentDetected`, the stage now rebuilds a softened retry prompt for that asset and retries once automatically
+  - the retry prompt removes or softens terms such as `惊悚` / `失踪` / `血迹` / `仵作` and strips dense parenthetical clue lists from style anchors
+  - hard failures now report the exact asset type / asset id / asset name that failed instead of surfacing only the raw SDK stack trace
 - Added `run_full_experiment.py` as a wrapper CLI that runs the full workflow to `final_video` and auto-approves the current `upstream` / `asset_images` / `storyboard` review checkpoints for local batch experiments.
 - Rolled back the experimental consistency-tuning stack after `runs/run17` showed no material end-to-end quality gain; the baseline asset-prompt, asset-image, and video-job assembly paths are active again.
 - Added legacy review bootstrap for checkpoint-gated runs:

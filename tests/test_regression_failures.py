@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from app.workflow_service import WorkflowService
-from pipeline.asset_images import build_jobs_payload
+from pipeline.asset_images import build_jobs_payload, build_sensitive_retry_render_prompt
 from pipeline.intent_to_script import normalize_intake_router_payload, read_json_string as read_stage_json_string
 from pipeline.storyboard import normalize_storyboard_payload, validate_storyboard_against_registry
 from prompts.asset_prompts import ASSET_PROMPTS_SYSTEM_PROMPT
@@ -186,6 +186,48 @@ class AssetImagePromptAssemblyTests(unittest.TestCase):
 
         self.assertIn("道具主体设定：银黑双色旧式录音笔，磨损金属边框，按键凹陷，细长机身。", prop_prompt)
         self.assertLess(prop_prompt.index("道具主体设定："), prop_prompt.index("版式固定："))
+
+    def test_sensitive_retry_prompt_softens_high_risk_terms(self) -> None:
+        asset_prompts = AssetPrompts.model_validate(
+            {
+                "schema_version": "1.0",
+                "source_script_name": "custom_input",
+                "title": "夜雨疑案",
+                "visual_style": "写实向中式古风漫绘，带有惊悚悬疑的阴郁质感。",
+                "consistency_anchors": "失踪线索人物与血迹道具保持一致（红鞋、黄符、半燃香）。",
+                "characters": [
+                    {
+                        "id": "char_001",
+                        "name": "调查学徒",
+                        "label_text": "[调查学徒 人物参考]",
+                        "prompt": "仵作学徒青年，面部有轻微伤痕，衣摆沾血迹。",
+                        "negative_prompt": "watermark, text",
+                        "aspect_ratio": "16:9",
+                        "framing": "Single-character reference sheet with a half-body to three-quarter portrait emphasis.",
+                        "background_treatment": "Clean light background, centered subject, reserved bottom label area.",
+                        "generation_intent": "Character consistency reference sheet for downstream storyboard and video generation.",
+                        "card_layout_notes": "Label language: zh-CN.",
+                    }
+                ],
+                "scenes": [],
+                "props": [],
+            }
+        )
+
+        retry_prompt = build_sensitive_retry_render_prompt(
+            item=asset_prompts.characters[0],
+            asset_type="character",
+            asset_prompts=asset_prompts,
+        )
+
+        self.assertNotIn("惊悚", retry_prompt)
+        self.assertNotIn("阴郁", retry_prompt)
+        self.assertNotIn("失踪", retry_prompt)
+        self.assertNotIn("血迹", retry_prompt)
+        self.assertNotIn("仵作", retry_prompt)
+        self.assertIn("悬疑", retry_prompt)
+        self.assertIn("细微痕迹", retry_prompt)
+        self.assertIn("暗色污渍", retry_prompt)
 
 
 class PromptTemplateBiasTests(unittest.TestCase):

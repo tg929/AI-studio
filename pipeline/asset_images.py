@@ -5,10 +5,12 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import subprocess
 from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
+from volcenginesdkarkruntime._exceptions import ArkBadRequestError
 
 from pipeline.io import dump_model, read_json, write_json
 from pipeline.runtime import ImageModelConfig, build_image_client
@@ -29,6 +31,7 @@ SIZE_BY_ASPECT_RATIO = {
 }
 
 DISABLE_PLATFORM_WATERMARK = True
+SENSITIVE_OUTPUT_ERROR_CODE = "OutputImageSensitiveContentDetected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +164,81 @@ def render_labeled_card(raw_image_path: Path, output_path: Path, label_text: str
     canvas.save(output_path, format=image_format, quality=95)
 
 
+def is_sensitive_output_error(error: Exception) -> bool:
+    if not isinstance(error, ArkBadRequestError):
+        return False
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        payload = body.get("error", {})
+        if isinstance(payload, dict) and str(payload.get("code", "")).strip() == SENSITIVE_OUTPUT_ERROR_CODE:
+            return True
+    return SENSITIVE_OUTPUT_ERROR_CODE in str(error)
+
+
+def sanitize_image_prompt_text(text: str) -> str:
+    sanitized = str(text)
+    replacements = [
+        ("惊悚悬疑", "悬疑"),
+        ("惊悚", "悬疑"),
+        ("阴郁", "克制"),
+        ("失踪", "神秘"),
+        ("血迹", "暗色污渍"),
+        ("血的", "暗色的"),
+        ("伤痕", "细微痕迹"),
+        ("尸体", "遗留痕迹"),
+        ("仵作", "调查"),
+        ("诡异", "古朴"),
+        ("恐怖", "紧张"),
+    ]
+    for source, target in replacements:
+        sanitized = sanitized.replace(source, target)
+    sanitized = re.sub(r"（[^）]*）", "", sanitized)
+    sanitized = re.sub(r"\([^)]*\)", "", sanitized)
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
+    return sanitized
+
+
+def build_sensitive_retry_render_prompt(
+    *,
+    item: CharacterAssetPrompt | SceneAssetPrompt | PropAssetPrompt,
+    asset_type: str,
+    asset_prompts: AssetPrompts,
+) -> str:
+    safe_visual_style = sanitize_image_prompt_text(asset_prompts.visual_style)
+    safe_consistency_anchors = sanitize_image_prompt_text(asset_prompts.consistency_anchors)
+    safe_prompt = sanitize_image_prompt_text(item.prompt)
+    safe_item = item.model_copy(update={"prompt": safe_prompt})
+
+    if asset_type == "character":
+        return (
+            build_character_render_prompt(
+                safe_item,
+                visual_style=safe_visual_style,
+                consistency_anchors=safe_consistency_anchors,
+            )
+            + " 整体保持中性设定图表达，不强调强刺激叙事或敏感情节。"
+        )
+    if asset_type == "scene":
+        return (
+            build_scene_render_prompt(
+                safe_item,
+                visual_style=safe_visual_style,
+                consistency_anchors=safe_consistency_anchors,
+            )
+            + " 整体保持中性环境设定图表达，不呈现强刺激或敏感画面。"
+        )
+    if asset_type == "prop":
+        return (
+            build_prop_render_prompt(
+                safe_item,
+                visual_style=safe_visual_style,
+                consistency_anchors=safe_consistency_anchors,
+            )
+            + " 整体保持中性道具设定图表达，不强调强刺激或敏感用途。"
+        )
+    raise ValueError(f"Unsupported asset type for sensitive retry: {asset_type}")
+
+
 def generate_single_image(
     *,
     client,
@@ -185,6 +263,41 @@ def generate_single_image(
     if not image_b64 and not image_url:
         raise ValueError("Image model returned neither image bytes nor download URL")
     return response, image_url, image_b64
+
+
+def generate_single_image_with_retry(
+    *,
+    client,
+    model_name: str,
+    render_prompt: str,
+    retry_render_prompt: str,
+    size: str,
+    asset_type: str,
+    asset_id: str,
+    asset_name: str,
+):
+    try:
+        return generate_single_image(
+            client=client,
+            model_name=model_name,
+            render_prompt=render_prompt,
+            size=size,
+        )
+    except Exception as error:
+        if not is_sensitive_output_error(error):
+            raise RuntimeError(f"{asset_type} `{asset_id}` ({asset_name}) image generation failed: {error}") from error
+        try:
+            return generate_single_image(
+                client=client,
+                model_name=model_name,
+                render_prompt=retry_render_prompt,
+                size=size,
+            )
+        except Exception as retry_error:
+            raise RuntimeError(
+                f"{asset_type} `{asset_id}` ({asset_name}) image generation failed after sensitive-content retry: "
+                f"{retry_error}"
+            ) from retry_error
 
 
 def write_b64_image(image_b64: str, dest: Path) -> None:
@@ -332,11 +445,19 @@ def generate_asset_images(
 
     character_entries = []
     for item, job in zip(asset_prompts.characters, jobs_payload["characters"], strict=True):
-        response, image_url, image_b64 = generate_single_image(
+        response, image_url, image_b64 = generate_single_image_with_retry(
             client=client,
             model_name=model_config.model_name,
             render_prompt=job["render_prompt"],
+            retry_render_prompt=build_sensitive_retry_render_prompt(
+                item=item,
+                asset_type="character",
+                asset_prompts=asset_prompts,
+            ),
             size=job["requested_size"],
+            asset_type="character",
+            asset_id=item.id,
+            asset_name=item.name,
         )
         response_path = artifacts.response_dir / f"{item.id}.json"
         write_json(response_path, dump_model(response))
@@ -362,11 +483,19 @@ def generate_asset_images(
 
     scene_entries = []
     for item, job in zip(asset_prompts.scenes, jobs_payload["scenes"], strict=True):
-        response, image_url, image_b64 = generate_single_image(
+        response, image_url, image_b64 = generate_single_image_with_retry(
             client=client,
             model_name=model_config.model_name,
             render_prompt=job["render_prompt"],
+            retry_render_prompt=build_sensitive_retry_render_prompt(
+                item=item,
+                asset_type="scene",
+                asset_prompts=asset_prompts,
+            ),
             size=job["requested_size"],
+            asset_type="scene",
+            asset_id=item.id,
+            asset_name=item.name,
         )
         response_path = artifacts.response_dir / f"{item.id}.json"
         write_json(response_path, dump_model(response))
@@ -392,11 +521,19 @@ def generate_asset_images(
 
     prop_entries = []
     for item, job in zip(asset_prompts.props, jobs_payload["props"], strict=True):
-        response, image_url, image_b64 = generate_single_image(
+        response, image_url, image_b64 = generate_single_image_with_retry(
             client=client,
             model_name=model_config.model_name,
             render_prompt=job["render_prompt"],
+            retry_render_prompt=build_sensitive_retry_render_prompt(
+                item=item,
+                asset_type="prop",
+                asset_prompts=asset_prompts,
+            ),
             size=job["requested_size"],
+            asset_type="prop",
+            asset_id=item.id,
+            asset_name=item.name,
         )
         response_path = artifacts.response_dir / f"{item.id}.json"
         write_json(response_path, dump_model(response))

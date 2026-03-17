@@ -348,6 +348,7 @@ Current role:
 - Builds image-generation jobs per asset
 - Injects project-level `visual_style` and `consistency_anchors` into every final image-stage render prompt
 - Calls the image model for each character / scene / prop asset
+- Retries once with a softened fallback prompt when the image API blocks an asset with `OutputImageSensitiveContentDetected`
 - Downloads raw images from signed URLs using `curl`
 - Adds stable local Chinese labels onto the final asset cards
 - Writes `asset_images_manifest.json`
