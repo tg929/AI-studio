@@ -4,6 +4,10 @@ Last updated: 2026-03-17
 
 ## Completed
 
+- Added a `run19` partial final-cut deliverable under `runs/run19/10_final/`:
+  - concatenated only the first five succeeded shot videos into `final_video_first5.mp4`
+  - saved the matching subset concat list as `concat_inputs_first5.txt`
+  - saved the matching manifest as `final_video_first5_manifest.json`
 - Fixed an asset-image prompt-composition regression that was flattening different inputs toward the same reference-board look:
   - removed hard-coded `东方玄幻 / 国风玄幻` genre bias from the `style_bible` and `asset_prompts` system prompts so project style now follows the actual source material
   - removed the hard-coded shared `精致国风玄幻手绘漫风` render-template bias from the final image-stage prompt builders
