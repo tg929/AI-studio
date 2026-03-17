@@ -18,6 +18,9 @@ Last updated: 2026-03-17
   - removed the old bottom `Tasks` block from the operator-facing run detail
   - kept the main detail focused on route judgment, stage cards, review panels, and media outputs
   - automatic polling now restores the browser scroll position after right-panel re-render, which stops the page from jumping back upward while the operator is reading lower sections
+- Unified the operator-console visible naming into Chinese, user-facing copy:
+  - the main modules, stage selector labels, and right-panel section titles now use Chinese names aimed at creators instead of engineering-oriented wording
+  - stage previews and upstream action summaries now avoid mixed English headings such as prompt-group labels
 - Slimmed the `Route Decision` presentation:
   - the old multi-block `Risks` / `Missing Critical Info` dump is gone from the main UI
   - the shared workflow service now computes a single `operator_hint`

@@ -12,7 +12,7 @@ def build_console_html() -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Studio Operator Console</title>
+  <title>AI Studio 制作台</title>
   <style>
     :root {
       --bg: #f2ede3;
@@ -800,26 +800,26 @@ def build_console_html() -> str:
   <div class="shell">
     <section class="hero">
       <div class="hero-card">
-        <h1>AI Studio Operator Console</h1>
+        <h1>AI Studio 制作台</h1>
         <div class="lead">
-          这一版控制台直接面向 workflow operator，而不是聊天式代理壳。
-          它基于共享 workflow service，先把 run 创建、run 观察、继续执行、单 stage 重跑这四个能力固定下来。
+          这一版界面直接面向创作流程操作，不再强调底层工程细节。
+          你可以在这里发起任务、观察进度、处理中断节点，并查看当前最重要的产出内容。
         </div>
         <div class="hero-meta">
-          <span class="pill">Python-only</span>
-          <span class="pill">Persisted run state</span>
-          <span class="pill">Stage-aware rerun</span>
-          <span class="pill">FastAPI console shell</span>
+          <span class="pill">纯 Python 实现</span>
+          <span class="pill">运行状态可恢复</span>
+          <span class="pill">支持按阶段重跑</span>
+          <span class="pill">本地控制台界面</span>
         </div>
       </div>
       <div class="hero-card hero-side">
         <div>
-          <strong>Current Focus</strong>
-          <p>先让 operator 能稳定操控现有 pipeline，并把 upstream、asset_images、storyboard 三个审批点接成真正的 gate。</p>
+          <strong>当前重点</strong>
+          <p>先让你能稳定地发起任务、查看过程、确认关键节点，并清楚知道系统现在正在做什么。</p>
         </div>
         <div>
-          <strong>Primary Actions</strong>
-          <p>创建 run、查看 run 状态、继续中断流程、强制重跑某个 stage、读取 `_meta` 事件流。</p>
+          <strong>常用操作</strong>
+          <p>新建任务、查看状态、继续执行、重跑某个阶段，以及检查当前最重要的中间结果。</p>
         </div>
       </div>
     </section>
@@ -827,29 +827,29 @@ def build_console_html() -> str:
     <section class="layout">
       <aside class="stack">
         <div class="panel">
-          <h2>Create Or Resume</h2>
+          <h2>新建任务</h2>
           <div class="stack">
-            <label>Source Name
-              <input id="source_script_name" placeholder="intent_input / 剧本名" />
+            <label>项目名称
+              <input id="source_script_name" placeholder="例如：斗气大陆第一幕" />
             </label>
-            <label>Execution
+            <label>处理范围
               <select id="execution_mode">
-                <option value="mainline">mainline</option>
-                <option value="upstream_only">upstream_only</option>
+                <option value="mainline">完整流程</option>
+                <option value="upstream_only">仅准备剧本</option>
               </select>
             </label>
-            <label>Source Text
-              <textarea id="source_text" placeholder="输入关键词、brief 或完整剧本。系统会自动判断输入类型并选择上游路由。"></textarea>
+            <label>输入内容
+              <textarea id="source_text" placeholder="输入关键词、简介或完整剧本。系统会自动判断输入类型，并选择合适的处理路径。"></textarea>
             </label>
-            <label>Parallel Planning
+            <label>提前准备镜头草稿
               <select id="parallel_planning">
-                <option value="true">true</option>
-                <option value="false">false</option>
+                <option value="true">开启</option>
+                <option value="false">关闭</option>
               </select>
             </label>
             <div class="actions">
-              <button onclick="createRun()">Launch Task</button>
-              <button class="secondary" onclick="loadRuns()">Refresh Runs</button>
+              <button onclick="createRun()">开始执行</button>
+              <button class="secondary" onclick="loadRuns()">刷新列表</button>
             </div>
             <div id="create_status" class="status">等待操作。</div>
           </div>
@@ -857,8 +857,8 @@ def build_console_html() -> str:
 
         <div class="panel">
           <div class="meta-line">
-            <h2 style="margin:0">Runs</h2>
-            <button class="ghost" onclick="loadRuns()">Reload</button>
+            <h2 style="margin:0">任务列表</h2>
+            <button class="ghost" onclick="loadRuns()">刷新</button>
           </div>
           <div id="runs" class="runs"></div>
         </div>
@@ -866,7 +866,7 @@ def build_console_html() -> str:
 
       <main class="detail-grid">
         <div class="panel" id="run_detail_panel">
-          <div class="empty">选择左侧 run 查看详情。</div>
+          <div class="empty">请先从左侧选择任务，或直接新建一个任务。</div>
         </div>
       </main>
     </section>
@@ -883,18 +883,18 @@ def build_console_html() -> str:
 
   <script>
     const stageOptions = [
-      'upstream',
-      'asset_extraction',
-      'style_bible',
-      'asset_prompts',
-      'asset_images',
-      'storyboard_seed',
-      'storyboard',
-      'shot_reference_boards',
-      'board_publish',
-      'video_jobs',
-      'shot_videos',
-      'final_video',
+      {value: 'upstream', label: '剧本准备'},
+      {value: 'asset_extraction', label: '提取角色与场景'},
+      {value: 'style_bible', label: '统一风格设定'},
+      {value: 'asset_prompts', label: '生成参考资产说明'},
+      {value: 'asset_images', label: '生成参考资产图'},
+      {value: 'storyboard_seed', label: '预排镜头'},
+      {value: 'storyboard', label: '正式分镜'},
+      {value: 'shot_reference_boards', label: '拼接镜头参考板'},
+      {value: 'board_publish', label: '发布参考板链接'},
+      {value: 'video_jobs', label: '整理视频生成任务'},
+      {value: 'shot_videos', label: '生成分镜视频'},
+      {value: 'final_video', label: '拼接最终成片'},
     ];
     const processSteps = ['输入接收', '系统判断', '剧本准备', '资产建立', '参考资产', '正式分镜'];
 
@@ -930,8 +930,28 @@ def build_console_html() -> str:
       }
     }
 
+    function humanizeStatus(status) {
+      const labels = {
+        pending: '待处理',
+        queued: '排队中',
+        running: '执行中',
+        succeeded: '已完成',
+        failed: '执行失败',
+        blocked: '已阻塞',
+        partial: '部分完成',
+        awaiting_approval: '等待确认',
+        skipped: '已跳过',
+        timed_out: '超时',
+        skipped_not_selected: '未选中',
+        skipped_job_not_ready: '未准备好',
+        approved: '已通过',
+        rejected: '已退回',
+      };
+      return labels[status] || status || '未知状态';
+    }
+
     function statusTag(status) {
-      return `<span class="tag ${status || ''}">${status || 'unknown'}</span>`;
+      return `<span class="tag ${status || ''}">${escapeHtml(humanizeStatus(status || ''))}</span>`;
     }
 
     function escapeHtml(value) {
@@ -950,13 +970,26 @@ def build_console_html() -> str:
     }
 
     function renderSummaryBox(label, value) {
-      const display = Array.isArray(value) ? value.join(', ') : String(value || 'N/A');
+      const display = Array.isArray(value) ? value.join('、') : String(value || '暂无');
       return `
         <div class="summary-box">
           <strong>${escapeHtml(label)}</strong>
           <div class="muted">${escapeHtml(display)}</div>
         </div>
       `;
+    }
+
+    function humanizeStageName(stageName) {
+      const labels = Object.fromEntries(stageOptions.map(option => [option.value, option.label]));
+      return labels[stageName] || stageName || '当前阶段';
+    }
+
+    function humanizeExecutionMode(mode) {
+      const labels = {
+        mainline: '完整流程',
+        upstream_only: '仅准备剧本',
+      };
+      return labels[mode] || mode || '默认执行';
     }
 
     function humanizeSourceKind(sourceKind) {
@@ -983,17 +1016,50 @@ def build_console_html() -> str:
       return labels[path] || path || '待判断';
     }
 
-    function humanizeTaskStatus(status) {
+    function humanizeOperation(operation) {
       const labels = {
-        queued: '排队中',
-        running: '执行中',
-        succeeded: '已完成',
-        failed: '执行失败',
-        blocked: '已阻塞',
-        partial: '部分完成',
-        awaiting_approval: '等待确认',
+        expand: '扩写剧情',
+        compress: '压缩收束剧情',
+        rewrite_for_asset_clarity: '补强人物与场景细节',
       };
-      return labels[status] || status || '未知状态';
+      return labels[operation] || operation || '待处理';
+    }
+
+    function humanizeOperationList(operations) {
+      if (!Array.isArray(operations) || !operations.length) {
+        return ['暂无'];
+      }
+      return operations.map(humanizeOperation);
+    }
+
+    function humanizeTaskStatus(status) {
+      return humanizeStatus(status);
+    }
+
+    function humanizeReviewStage(stage) {
+      const labels = {
+        upstream: '剧本准备确认',
+        asset_images: '参考资产确认',
+        storyboard: '分镜确认',
+      };
+      return labels[stage] || stage || '待确认';
+    }
+
+    function humanizeEventType(eventType) {
+      const labels = {
+        task_queued: '任务已排队',
+        task_started: '任务已开始',
+        task_finished: '任务已结束',
+        task_failed: '任务执行失败',
+        operator_progress: '系统正在处理',
+        stage_started: '阶段开始',
+        stage_succeeded: '阶段完成',
+        stage_failed: '阶段失败',
+        stage_blocked: '阶段已阻塞',
+        approval_required: '等待确认',
+        review_reset: '确认状态已重置',
+      };
+      return labels[eventType] || eventType || '执行事件';
     }
 
     function buildRouteDecisionHeadline(routeDecision) {
@@ -1014,8 +1080,8 @@ def build_console_html() -> str:
         <div class="summary-grid">
           ${renderSummaryBox('输入判定', humanizeSourceKind(routeDecision?.source_kind))}
           ${renderSummaryBox('执行路径', humanizeChosenPath(routeDecision?.chosen_path))}
-          ${renderSummaryBox('目标时长', projectTarget.target_runtime_sec || 'N/A')}
-          ${renderSummaryBox('目标镜头', projectTarget.target_shot_count || 'N/A')}
+          ${renderSummaryBox('目标时长', projectTarget.target_runtime_sec || '暂无')}
+          ${renderSummaryBox('目标镜头', projectTarget.target_shot_count || '暂无')}
         </div>
         <div class="workspace-summary">
           <div class="summary-box">
@@ -1051,7 +1117,7 @@ def build_console_html() -> str:
         return task.progress_message;
       }
       if (runState.awaiting_approval_stage) {
-        return `当前产物已生成，请先确认 ${runState.awaiting_approval_stage} 后继续。`;
+        return `当前产物已生成，请先确认${humanizeReviewStage(runState.awaiting_approval_stage)}后继续。`;
       }
       const stageName = runState.current_stage || task?.progress_stage || '';
       const labels = {
@@ -1129,7 +1195,7 @@ def build_console_html() -> str:
         <section class="panel" style="padding:16px">
           <h2>当前产物摘要</h2>
           <div class="summary-box">
-            <strong>${escapeHtml(stagePayload.preview_headline || currentStageName || '当前阶段')}</strong>
+            <strong>${escapeHtml(stagePayload.preview_headline || humanizeStageName(currentStageName) || '当前阶段')}</strong>
             <div class="muted">${escapeHtml(stagePayload.preview_text || stagePayload.message || fallbackCurrentAction(task, runPayload))}</div>
           </div>
         </section>
@@ -1138,15 +1204,15 @@ def build_console_html() -> str:
 
     function renderActiveTaskPanel(task, runPayload, events) {
       const runState = runPayload?.run_state || {};
-      const latestRunId = task?.run_id || runState.run_id || activeRunId || 'pending';
+      const latestRunId = task?.run_id || runState.run_id || activeRunId || '待分配';
       const recentEvents = (events || []).slice(-5).reverse();
       const eventRows = recentEvents.length ? recentEvents.map(event => `
         <div class="event-row">
           <div class="meta-line">
-            <strong>${escapeHtml(event.message || event.event_type || 'event')}</strong>
+            <strong>${escapeHtml(event.message || humanizeEventType(event.event_type || '') || '执行事件')}</strong>
             <span class="muted">${escapeHtml(event.timestamp || '')}</span>
           </div>
-          <div class="muted">${escapeHtml(event.stage || '')}</div>
+          <div class="muted">${escapeHtml(humanizeStageName(event.stage || '') || '')}</div>
         </div>
       `).join('') : '<div class="empty">系统正在准备更多过程信息。</div>';
 
@@ -1156,10 +1222,10 @@ def build_console_html() -> str:
             <div class="timeline-kicker">当前任务</div>
             <div class="action-text">${escapeHtml(fallbackCurrentAction(task, runPayload))}</div>
             <div class="workbench-meta">
-              <span class="pill">task: ${escapeHtml(task?.task_id || '')}</span>
-              <span class="pill">run: ${escapeHtml(latestRunId)}</span>
-              <span class="pill">状态: ${escapeHtml(humanizeTaskStatus(task?.status || 'running'))}</span>
-              ${task?.progress_step ? `<span class="pill">流程: ${escapeHtml(task.progress_step)}</span>` : ''}
+              <span class="pill">任务编号：${escapeHtml(task?.task_id || '')}</span>
+              <span class="pill">任务目录：${escapeHtml(latestRunId)}</span>
+              <span class="pill">状态：${escapeHtml(humanizeTaskStatus(task?.status || 'running'))}</span>
+              ${task?.progress_step ? `<span class="pill">流程：${escapeHtml(task.progress_step)}</span>` : ''}
             </div>
           </section>
           ${renderProcessTimeline(task, runPayload)}
@@ -1196,27 +1262,27 @@ def build_console_html() -> str:
           <div class="review-toolbar">
             <div>
               <h3>${escapeHtml(title)}</h3>
-              <div class="muted">reviewer: ${escapeHtml(review.reviewer || 'unassigned')}</div>
+              <div class="muted">审核人：${escapeHtml(review.reviewer || '未填写')}</div>
             </div>
             ${statusTag(review.status)}
           </div>
           ${bodyHtml}
           <div class="review-form">
             <div class="row">
-              <label>Reviewer
-                <input class="compact-input" id="reviewer_${stage}" value="${escapeHtml(review.reviewer || '')}" placeholder="operator name" />
+              <label>审核人
+                <input class="compact-input" id="reviewer_${stage}" value="${escapeHtml(review.reviewer || '')}" placeholder="填写处理人姓名" />
               </label>
-              <label>Updated
+              <label>更新时间
                 <input class="compact-input" value="${escapeHtml(review.updated_at || '')}" readonly />
               </label>
             </div>
-            <label>Notes
+            <label>备注
               <textarea id="notes_${stage}" placeholder="记录通过原因、问题点或返工建议。">${escapeHtml(review.notes || '')}</textarea>
             </label>
             <div class="review-actions">
-              <button class="approve" onclick="submitReview('${stage}', 'approved')">Approve</button>
-              <button class="reject" onclick="submitReview('${stage}', 'rejected')">Reject</button>
-              <button class="pending" onclick="submitReview('${stage}', 'pending')">Mark Pending</button>
+              <button class="approve" onclick="submitReview('${stage}', 'approved')">确认通过</button>
+              <button class="reject" onclick="submitReview('${stage}', 'rejected')">退回调整</button>
+              <button class="pending" onclick="submitReview('${stage}', 'pending')">标记待处理</button>
             </div>
           </div>
         </section>
@@ -1228,7 +1294,7 @@ def build_console_html() -> str:
         return `
           <section class="panel" style="padding:16px">
             <h2>系统判断</h2>
-            <div class="empty" style="margin-top:14px">当前 run 还没有可展示的系统判断。</div>
+            <div class="empty" style="margin-top:14px">当前任务还没有可展示的系统判断。</div>
           </section>
         `;
       }
@@ -1247,46 +1313,46 @@ def build_console_html() -> str:
       const artifacts = payload.artifacts || {};
       const summaryHtml = `
         <div class="summary-grid">
-          ${renderSummaryBox('chosen_path', summary.chosen_path)}
-          ${renderSummaryBox('recommended_operations', summary.recommended_operations || [])}
-          ${renderSummaryBox('ready_for_extraction', summary.ready_for_extraction)}
-          ${renderSummaryBox('blocking_issues', summary.blocking_issues || [])}
+          ${renderSummaryBox('执行路径', humanizeChosenPath(summary.chosen_path))}
+          ${renderSummaryBox('系统会做什么', humanizeOperationList(summary.recommended_operations))}
+          ${renderSummaryBox('可继续进入资产阶段', summary.ready_for_extraction ? '是' : '否')}
+          ${renderSummaryBox('阻塞问题', summary.blocking_issues || [])}
         </div>
       `;
-      const routerJson = artifacts['intake_router.json'] ? JSON.stringify(artifacts['intake_router.json'], null, 2) : 'No intake_router.json';
-      const readinessJson = artifacts['asset_readiness_report.json'] ? JSON.stringify(artifacts['asset_readiness_report.json'], null, 2) : 'No asset_readiness_report.json';
-      const scriptPreview = artifacts['script_clean.txt'] ? truncate(artifacts['script_clean.txt'], 900) : 'No script_clean.txt';
+      const routerJson = artifacts['intake_router.json'] ? JSON.stringify(artifacts['intake_router.json'], null, 2) : '暂无路由判断结果';
+      const readinessJson = artifacts['asset_readiness_report.json'] ? JSON.stringify(artifacts['asset_readiness_report.json'], null, 2) : '暂无可读性检查结果';
+      const scriptPreview = artifacts['script_clean.txt'] ? truncate(artifacts['script_clean.txt'], 900) : '暂无标准剧本';
       const bodyHtml = `
         ${summaryHtml}
         <div class="stack" style="margin-top:14px">
           <div>
-            <div class="muted" style="margin-bottom:6px">intake_router.json</div>
+            <div class="muted" style="margin-bottom:6px">系统判断详情</div>
             <div class="json-box">${escapeHtml(routerJson)}</div>
           </div>
           <div>
-            <div class="muted" style="margin-bottom:6px">asset_readiness_report.json</div>
+            <div class="muted" style="margin-bottom:6px">可继续执行检查</div>
             <div class="json-box">${escapeHtml(readinessJson)}</div>
           </div>
           <div>
-            <div class="muted" style="margin-bottom:6px">script_clean.txt</div>
+            <div class="muted" style="margin-bottom:6px">当前标准剧本</div>
             <div class="json-box">${escapeHtml(scriptPreview)}</div>
           </div>
         </div>
       `;
-      return renderReviewSection('upstream', 'Upstream Review', reviewPayload, bodyHtml);
+      return renderReviewSection('upstream', '剧本准备确认', reviewPayload, bodyHtml);
     }
 
     function humanizeGroup(group) {
       const labels = {
-        all: 'All',
-        characters: 'Characters',
-        scenes: 'Scenes',
-        props: 'Props',
-        character: 'Character',
-        scene: 'Scene',
-        prop: 'Prop',
+        all: '全部',
+        characters: '人物',
+        scenes: '场景',
+        props: '道具',
+        character: '人物',
+        scene: '场景',
+        prop: '道具',
       };
-      return labels[group] || group || 'Unknown';
+      return labels[group] || group || '未知';
     }
 
     function renderMediaElement(url, alt) {
@@ -1298,7 +1364,7 @@ def build_console_html() -> str:
       if (/\\.(mp4|mov|webm)(\\?|$)/.test(normalized)) {
         return `<video class="media-thumb" src="${raw}" muted playsinline controls></video>`;
       }
-      return `<img class="media-thumb" src="${raw}" alt="${escapeHtml(alt || 'preview')}" />`;
+      return `<img class="media-thumb" src="${raw}" alt="${escapeHtml(alt || '预览图')}" />`;
     }
 
     function openMediaModal(url, title = '', description = '', externalUrl = '') {
@@ -1310,11 +1376,11 @@ def build_console_html() -> str:
       const normalized = String(url).toLowerCase();
       const mediaHtml = /\\.(mp4|mov|webm)(\\?|$)/.test(normalized)
         ? `<video src="${url}" controls autoplay playsinline></video>`
-        : `<img src="${url}" alt="${escapeHtml(title || 'preview')}" />`;
+        : `<img src="${url}" alt="${escapeHtml(title || '预览图')}" />`;
       meta.innerHTML = `
         <div class="meta-line">
-          <strong>${escapeHtml(title || 'Preview')}</strong>
-          ${externalUrl ? `<a class="text-button" href="${externalUrl}" target="_blank" rel="noopener noreferrer">Open Source</a>` : ''}
+          <strong>${escapeHtml(title || '预览')}</strong>
+          ${externalUrl ? `<a class="text-button" href="${externalUrl}" target="_blank" rel="noopener noreferrer">打开来源</a>` : ''}
         </div>
         ${description ? `<div class="muted">${escapeHtml(description)}</div>` : ''}
       `;
@@ -1347,21 +1413,21 @@ def build_console_html() -> str:
       const summary = reviewPayload?.payload?.summary || {};
       const summaryHtml = `
         <div class="summary-grid">
-          ${renderSummaryBox('characters', summary.character_count)}
-          ${renderSummaryBox('scenes', summary.scene_count)}
-          ${renderSummaryBox('props', summary.prop_count)}
+          ${renderSummaryBox('人物', summary.character_count)}
+          ${renderSummaryBox('场景', summary.scene_count)}
+          ${renderSummaryBox('道具', summary.prop_count)}
         </div>
       `;
       const bodyHtml = `
         <div class="review-shell">
           ${summaryHtml}
-          <div class="review-note">按资产类型筛选，支持按名称或 ID 搜索。点击缩略图可以直接在控制台里放大检查。</div>
+          <div class="review-note">按资产类型筛选，支持按名称或编号搜索。点击缩略图可以直接在控制台里放大检查。</div>
           <div class="review-controls">
             <div id="asset_images_filter_row" class="chip-row"></div>
             <input
               id="asset_images_query"
               class="review-search"
-              placeholder="Search asset id / name / label"
+              placeholder="搜索资产名称、编号或标签"
               value="${escapeHtml(assetImageQuery)}"
               oninput="updateAssetImageQuery(this.value)"
             />
@@ -1370,7 +1436,7 @@ def build_console_html() -> str:
           <div id="asset_images_review_dynamic"></div>
         </div>
       `;
-      return renderReviewSection('asset_images', 'Asset Images Review', reviewPayload, bodyHtml);
+      return renderReviewSection('asset_images', '参考资产确认', reviewPayload, bodyHtml);
     }
 
     function renderReferenceAssetCard(asset) {
@@ -1420,7 +1486,7 @@ def build_console_html() -> str:
         if (!normalizedQuery) return true;
         return [item.id, item.name, item.label_text, item.group].join(' ').toLowerCase().includes(normalizedQuery);
       });
-      metaRoot.textContent = `Showing ${filtered.length} / ${items.length} assets`;
+      metaRoot.textContent = `当前显示 ${filtered.length} / ${items.length} 张参考资产`;
 
       contentRoot.innerHTML = filtered.length ? `
         <div class="media-grid">
@@ -1437,8 +1503,8 @@ def build_console_html() -> str:
                 <div class="code">${escapeHtml(item.id || '')}</div>
                 <div class="muted">${escapeHtml(item.label_text || '')}</div>
                 <div class="media-actions">
-                  ${item.preview_url ? `<button class="text-button" onclick='openMediaModal(${JSON.stringify(item.preview_url)}, ${JSON.stringify(item.name || item.id)}, ${JSON.stringify(item.label_text || item.group || "")})'>Inspect</button>` : ''}
-                  ${item.preview_url ? `<a class="text-button" href="${item.preview_url}" target="_blank" rel="noopener noreferrer">Open File</a>` : ''}
+                  ${item.preview_url ? `<button class="text-button" onclick='openMediaModal(${JSON.stringify(item.preview_url)}, ${JSON.stringify(item.name || item.id)}, ${JSON.stringify(item.label_text || item.group || "")})'>查看大图</button>` : ''}
+                  ${item.preview_url ? `<a class="text-button" href="${item.preview_url}" target="_blank" rel="noopener noreferrer">打开本地文件</a>` : ''}
                 </div>
               </div>
             </div>
@@ -1462,14 +1528,14 @@ def build_console_html() -> str:
       const bodyHtml = `
         <div class="review-shell">
           <div class="summary-grid">
-            ${renderSummaryBox('title', summary.title)}
-            ${renderSummaryBox('shot_count', summary.shot_count)}
+            ${renderSummaryBox('标题', summary.title)}
+            ${renderSummaryBox('镜头数', summary.shot_count)}
           </div>
-          <div class="review-note">左侧快速切 shot，右侧集中看 prompt、镜头参数、关联参考资产和已有 board。</div>
+          <div class="review-note">左侧快速切换镜头，右侧集中查看镜头描述、镜头参数、关联参考资产和已有参考板。</div>
           <div id="storyboard_review_dynamic"></div>
         </div>
       `;
-      return renderReviewSection('storyboard', 'Storyboard Review', reviewPayload, bodyHtml);
+      return renderReviewSection('storyboard', '分镜确认', reviewPayload, bodyHtml);
     }
 
     function paintStoryboardReview() {
@@ -1477,7 +1543,7 @@ def build_console_html() -> str:
       if (!root) return;
       const shots = storyboardReviewCache?.payload?.shots || [];
       if (!shots.length) {
-        root.innerHTML = '<div class="empty">storyboard 产物还不存在。</div>';
+        root.innerHTML = '<div class="empty">当前还没有可查看的正式分镜。</div>';
         return;
       }
 
@@ -1489,10 +1555,10 @@ def build_console_html() -> str:
       const railHtml = shots.map(shot => `
         <button class="shot-nav-card ${shot.shot_id === storyboardSelectedShotId ? 'active' : ''}" onclick='selectStoryboardShot(${JSON.stringify(shot.shot_id)})'>
           <div class="meta-line">
-            <strong>${escapeHtml(shot.shot_id || 'shot')}</strong>
+            <strong>${escapeHtml(shot.shot_id || '镜头')}</strong>
             <span class="muted">#${escapeHtml(shot.order || '')}</span>
           </div>
-          <div class="muted">${escapeHtml(shot.shot_type || 'shot')}</div>
+          <div class="muted">${escapeHtml(shot.shot_type || '镜头')}</div>
           <div style="margin-top:8px">${escapeHtml(truncate(shot.summary || '', 90))}</div>
         </button>
       `).join('');
@@ -1500,19 +1566,19 @@ def build_console_html() -> str:
       const referenceAssets = selectedShot.reference_assets || [];
       const boardHtml = selectedShot.board_preview_url ? `
         <div class="board-frame">
-          <button class="media-thumb-button" onclick='openMediaModal(${JSON.stringify(selectedShot.board_preview_url)}, ${JSON.stringify(selectedShot.shot_id + " board")}, ${JSON.stringify(selectedShot.board_layout_template || "")}, ${JSON.stringify(selectedShot.board_public_url || selectedShot.board_preview_url)})'>
-            ${renderMediaElement(selectedShot.board_preview_url, (selectedShot.shot_id || 'shot') + ' board')}
+          <button class="media-thumb-button" onclick='openMediaModal(${JSON.stringify(selectedShot.board_preview_url)}, ${JSON.stringify(selectedShot.shot_id + " 参考板")}, ${JSON.stringify(selectedShot.board_layout_template || "")}, ${JSON.stringify(selectedShot.board_public_url || selectedShot.board_preview_url)})'>
+            ${renderMediaElement(selectedShot.board_preview_url, (selectedShot.shot_id || '镜头') + ' 参考板')}
           </button>
         </div>
         <div class="media-actions">
-          <button class="text-button" onclick='openMediaModal(${JSON.stringify(selectedShot.board_preview_url)}, ${JSON.stringify(selectedShot.shot_id + " board")}, ${JSON.stringify(selectedShot.board_layout_template || "")}, ${JSON.stringify(selectedShot.board_public_url || selectedShot.board_preview_url)})'>Inspect Board</button>
-          ${selectedShot.board_public_url ? `<a class="text-button" href="${selectedShot.board_public_url}" target="_blank" rel="noopener noreferrer">Open Public URL</a>` : ''}
+          <button class="text-button" onclick='openMediaModal(${JSON.stringify(selectedShot.board_preview_url)}, ${JSON.stringify(selectedShot.shot_id + " 参考板")}, ${JSON.stringify(selectedShot.board_layout_template || "")}, ${JSON.stringify(selectedShot.board_public_url || selectedShot.board_preview_url)})'>查看参考板</button>
+          ${selectedShot.board_public_url ? `<a class="text-button" href="${selectedShot.board_public_url}" target="_blank" rel="noopener noreferrer">打开公开链接</a>` : ''}
         </div>
-      ` : '<div class="empty">当前 run 还没有可预览的 shot board。</div>';
+      ` : '<div class="empty">当前还没有可预览的镜头参考板。</div>';
 
       const referenceHtml = referenceAssets.length
         ? `<div class="reference-strip">${referenceAssets.map(renderReferenceAssetCard).join('')}</div>`
-        : '<div class="empty">当前 shot 还没有可展示的参考资产。</div>';
+        : '<div class="empty">当前镜头还没有可展示的参考资产。</div>';
 
       const continuityNotes = Array.isArray(selectedShot.continuity_notes) ? selectedShot.continuity_notes : [];
       root.innerHTML = `
@@ -1521,39 +1587,39 @@ def build_console_html() -> str:
           <div class="review-detail">
             <div class="meta-line">
               <div>
-                <h3>${escapeHtml(selectedShot.shot_id || 'shot')}</h3>
+                <h3>${escapeHtml(selectedShot.shot_id || '镜头')}</h3>
                 <div class="muted">${escapeHtml(selectedShot.summary || '')}</div>
               </div>
               ${statusTag(storyboardReviewCache?.review?.status || 'pending')}
             </div>
             <div class="micro-grid">
-              <div class="micro-card"><strong>Shot Type</strong><div>${escapeHtml(selectedShot.shot_type || 'N/A')}</div></div>
-              <div class="micro-card"><strong>Camera</strong><div>${escapeHtml([selectedShot.shot_size, selectedShot.camera_angle, selectedShot.camera_movement].filter(Boolean).join(' / ') || 'N/A')}</div></div>
-              <div class="micro-card"><strong>Emotion</strong><div>${escapeHtml(selectedShot.emotion_tone || 'N/A')}</div></div>
-              <div class="micro-card"><strong>Assets</strong><div>${escapeHtml(String(referenceAssets.length || 0))}</div></div>
+              <div class="micro-card"><strong>镜头类型</strong><div>${escapeHtml(selectedShot.shot_type || '暂无')}</div></div>
+              <div class="micro-card"><strong>镜头参数</strong><div>${escapeHtml([selectedShot.shot_size, selectedShot.camera_angle, selectedShot.camera_movement].filter(Boolean).join(' / ') || '暂无')}</div></div>
+              <div class="micro-card"><strong>情绪氛围</strong><div>${escapeHtml(selectedShot.emotion_tone || '暂无')}</div></div>
+              <div class="micro-card"><strong>参考资产数</strong><div>${escapeHtml(String(referenceAssets.length || 0))}</div></div>
             </div>
             <div class="detail-grid-two">
               <div class="detail-section">
                 <div>
-                  <div class="muted" style="margin-bottom:6px">Shot Prompt</div>
+                  <div class="muted" style="margin-bottom:6px">镜头描述</div>
                   <div class="json-box">${escapeHtml(selectedShot.prompt || '')}</div>
                 </div>
                 <div class="note-list">
-                  ${selectedShot.subject_action ? `<div class="note-item"><strong>Subject</strong><div>${escapeHtml(selectedShot.subject_action)}</div></div>` : ''}
-                  ${selectedShot.background_action ? `<div class="note-item"><strong>Background</strong><div>${escapeHtml(selectedShot.background_action)}</div></div>` : ''}
-                  ${continuityNotes.map(note => `<div class="note-item"><strong>Continuity</strong><div>${escapeHtml(note)}</div></div>`).join('')}
+                  ${selectedShot.subject_action ? `<div class="note-item"><strong>主体动作</strong><div>${escapeHtml(selectedShot.subject_action)}</div></div>` : ''}
+                  ${selectedShot.background_action ? `<div class="note-item"><strong>背景动作</strong><div>${escapeHtml(selectedShot.background_action)}</div></div>` : ''}
+                  ${continuityNotes.map(note => `<div class="note-item"><strong>连续性提示</strong><div>${escapeHtml(note)}</div></div>`).join('')}
                 </div>
               </div>
               <div class="detail-section">
                 <div>
-                  <div class="muted" style="margin-bottom:6px">Current Board Preview</div>
+                  <div class="muted" style="margin-bottom:6px">当前参考板</div>
                   ${boardHtml}
                 </div>
               </div>
             </div>
             <div class="detail-section">
               <div class="meta-line">
-                <strong>Reference Assets</strong>
+                <strong>参考资产</strong>
                 <span class="muted">${escapeHtml(selectedShot.primary_scene_id || '')}</span>
               </div>
               ${referenceHtml}
@@ -1573,38 +1639,50 @@ def build_console_html() -> str:
       paintShotVideosSection();
     }
 
+    function humanizeShotVideoFilter(filter) {
+      const labels = {
+        all: '全部',
+        succeeded: '已完成',
+        failed: '失败',
+        timed_out: '超时',
+        skipped_not_selected: '未选中',
+        skipped_job_not_ready: '未准备好',
+      };
+      return labels[filter] || humanizeStatus(filter);
+    }
+
     function renderFinalVideoPanel(videoPayload) {
       const finalVideo = videoPayload?.final_video || {};
       const summary = videoPayload?.summary || {};
       const summaryHtml = `
         <div class="summary-grid">
-          ${renderSummaryBox('shot_count', finalVideo.shot_count || summary.total_shots || 0)}
-          ${renderSummaryBox('trim_leading_seconds', finalVideo.trim_leading_seconds ?? 'N/A')}
-          ${renderSummaryBox('blackout_leading_seconds', finalVideo.blackout_leading_seconds ?? 'N/A')}
-          ${renderSummaryBox('concat_mode', finalVideo.concat_mode || 'N/A')}
+          ${renderSummaryBox('镜头数', finalVideo.shot_count || summary.total_shots || 0)}
+          ${renderSummaryBox('前段裁切秒数', finalVideo.trim_leading_seconds ?? '暂无')}
+          ${renderSummaryBox('前段黑场秒数', finalVideo.blackout_leading_seconds ?? '暂无')}
+          ${renderSummaryBox('拼接方式', finalVideo.concat_mode || '暂无')}
         </div>
       `;
       if (!finalVideo.available || !finalVideo.preview_url) {
         return `
           <section class="panel" style="padding:16px">
-            <h2>Final Video</h2>
+            <h2>最终成片</h2>
             ${summaryHtml}
-            <div class="empty" style="margin-top:14px">最终拼接视频还不存在，完成 final_video stage 后会显示在这里。</div>
+            <div class="empty" style="margin-top:14px">最终拼接视频还不存在，完成最终成片阶段后会显示在这里。</div>
           </section>
         `;
       }
 
       return `
         <section class="panel" style="padding:16px">
-          <h2>Final Video</h2>
+          <h2>最终成片</h2>
           <div class="video-hero">
             ${summaryHtml}
             <div class="video-frame">
               <video src="${finalVideo.preview_url}" controls preload="metadata"></video>
             </div>
             <div class="media-actions">
-              <button class="text-button" onclick='openMediaModal(${JSON.stringify(finalVideo.preview_url)}, ${JSON.stringify(finalVideo.title || "final video")}, ${JSON.stringify("stitched final output")})'>Inspect Final</button>
-              <a class="text-button" href="${finalVideo.preview_url}" target="_blank" rel="noopener noreferrer">Open Final File</a>
+              <button class="text-button" onclick='openMediaModal(${JSON.stringify(finalVideo.preview_url)}, ${JSON.stringify(finalVideo.title || "最终成片")}, ${JSON.stringify("拼接后的最终输出")})'>查看成片</button>
+              <a class="text-button" href="${finalVideo.preview_url}" target="_blank" rel="noopener noreferrer">打开本地文件</a>
             </div>
           </div>
         </section>
@@ -1628,13 +1706,13 @@ def build_console_html() -> str:
         .filter(item => item === 'all' || statusCounts[item])
         .map(item => `
           <button class="chip ${shotVideoFilter === item ? 'active' : ''}" onclick="setShotVideoFilter('${item}')">
-            ${item === 'all' ? 'All' : item} · ${item === 'all' ? shotVideos.length : statusCounts[item]}
+            ${humanizeShotVideoFilter(item)} · ${item === 'all' ? shotVideos.length : statusCounts[item]}
           </button>
         `)
         .join('');
 
       const filtered = shotVideos.filter(item => shotVideoFilter === 'all' || item.status === shotVideoFilter);
-      metaRoot.textContent = `Showing ${filtered.length} / ${shotVideos.length} shot videos`;
+      metaRoot.textContent = `当前显示 ${filtered.length} / ${shotVideos.length} 条分镜视频`;
 
       root.innerHTML = filtered.length ? `
         <div class="video-grid">
@@ -1643,16 +1721,16 @@ def build_console_html() -> str:
               ${item.preview_url ? `<video class="media-thumb" src="${item.preview_url}" controls preload="metadata"></video>` : `<div class="media-thumb"></div>`}
               <div class="video-body">
                 <div class="meta-line">
-                  <strong>${escapeHtml(item.shot_id || 'shot')}</strong>
+                  <strong>${escapeHtml(item.shot_id || '镜头')}</strong>
                   ${statusTag(item.status)}
                 </div>
-                <div class="muted">order ${escapeHtml(item.order || '')}</div>
-                <div class="muted">segments: ${escapeHtml((item.segment_ids || []).join(', ') || 'N/A')}</div>
+                <div class="muted">顺序：${escapeHtml(item.order || '')}</div>
+                <div class="muted">对应片段：${escapeHtml((item.segment_ids || []).join('、') || '暂无')}</div>
                 ${item.error_message ? `<div class="muted">${escapeHtml(item.error_message)}</div>` : ''}
                 <div class="media-actions">
-                  ${item.preview_url ? `<button class="text-button" onclick='openMediaModal(${JSON.stringify(item.preview_url)}, ${JSON.stringify(item.shot_id || "shot video")}, ${JSON.stringify(item.status || "")}, ${JSON.stringify(item.external_url || item.preview_url)})'>Inspect</button>` : ''}
-                  ${item.preview_url ? `<a class="text-button" href="${item.preview_url}" target="_blank" rel="noopener noreferrer">Open Local</a>` : ''}
-                  ${item.external_url ? `<a class="text-button" href="${item.external_url}" target="_blank" rel="noopener noreferrer">Open Remote</a>` : ''}
+                  ${item.preview_url ? `<button class="text-button" onclick='openMediaModal(${JSON.stringify(item.preview_url)}, ${JSON.stringify(item.shot_id || "分镜视频")}, ${JSON.stringify(humanizeStatus(item.status || ""))}, ${JSON.stringify(item.external_url || item.preview_url)})'>查看视频</button>` : ''}
+                  ${item.preview_url ? `<a class="text-button" href="${item.preview_url}" target="_blank" rel="noopener noreferrer">打开本地文件</a>` : ''}
+                  ${item.external_url ? `<a class="text-button" href="${item.external_url}" target="_blank" rel="noopener noreferrer">打开远程链接</a>` : ''}
                 </div>
               </div>
             </div>
@@ -1665,12 +1743,12 @@ def build_console_html() -> str:
       const summary = videoPayload?.summary || {};
       return `
         <section class="panel" style="padding:16px">
-          <h2>Shot Videos</h2>
+          <h2>分镜视频</h2>
           <div class="summary-grid">
-            ${renderSummaryBox('total_shots', summary.total_shots || 0)}
-            ${renderSummaryBox('succeeded_shots', summary.succeeded_shots || 0)}
-            ${renderSummaryBox('failed_or_other', summary.failed_shots || 0)}
-            ${renderSummaryBox('has_final_video', summary.has_final_video ? 'true' : 'false')}
+            ${renderSummaryBox('总镜头数', summary.total_shots || 0)}
+            ${renderSummaryBox('已完成', summary.succeeded_shots || 0)}
+            ${renderSummaryBox('失败或其他', summary.failed_shots || 0)}
+            ${renderSummaryBox('已生成最终成片', summary.has_final_video ? '是' : '否')}
           </div>
           <div class="video-filter-bar" style="margin-top:14px">
             <div id="shot_videos_filter_row" class="chip-row"></div>
@@ -1697,7 +1775,7 @@ def build_console_html() -> str:
       const runs = payload.runs || [];
       const root = document.getElementById('runs');
       if (!runs.length) {
-        root.innerHTML = '<div class="empty">当前还没有 run。</div>';
+        root.innerHTML = '<div class="empty">当前还没有任务记录。</div>';
         return;
       }
       root.innerHTML = runs.map(run => `
@@ -1706,9 +1784,9 @@ def build_console_html() -> str:
             <div class="run-id">${run.run_id}</div>
             ${statusTag(run.status)}
           </div>
-          <div class="muted">${run.source_script_name || 'unnamed source'}</div>
+          <div class="muted">${run.source_script_name || '未命名任务'}</div>
           <div class="meta-line" style="margin-top:10px">
-            <span class="muted">${run.current_stage || 'idle'}</span>
+            <span class="muted">${humanizeStageName(run.current_stage || '') || '待处理'}</span>
             <span class="muted">${run.updated_at || ''}</span>
           </div>
         </div>
@@ -1742,7 +1820,7 @@ def build_console_html() -> str:
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        statusBox.textContent = `任务已提交: ${result.task_id || 'sync-result'} / ${result.run_id || result.run_dir || ''}`;
+        statusBox.textContent = `任务已提交：${result.task_id || '已创建'} / ${result.run_id || result.run_dir || ''}`;
         activeTaskId = result.task_id || '';
         activeRunId = result.run_id || '';
         if (result.run_id) {
@@ -1755,7 +1833,7 @@ def build_console_html() -> str:
         await loadRuns();
         await loadRightPanel();
       } catch (error) {
-        statusBox.textContent = `提交失败: ${error.message}`;
+        statusBox.textContent = `提交失败：${error.message}`;
       }
     }
 
@@ -1841,18 +1919,18 @@ def build_console_html() -> str:
         return `
           <div class="stage-card">
             <div class="meta-line">
-              <strong>${stageName}</strong>
+              <strong>${escapeHtml(humanizeStageName(stageName))}</strong>
               ${statusTag(stage.status)}
             </div>
             ${stage.preview_headline ? `<div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_headline)}</div>` : ''}
-            <div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_text || stage.message || 'No stage summary yet.')}</div>
+            <div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_text || stage.message || '当前还没有阶段摘要。')}</div>
             <div class="muted" style="margin-top:10px">${stage.updated_at || ''}</div>
           </div>
         `;
       }).join('');
 
       const reviewOverview = ['upstream', 'asset_images', 'storyboard'].map(stage => `
-        <span class="pill">${stage}: ${reviewSummary?.[stage]?.status || 'pending'}</span>
+        <span class="pill">${humanizeReviewStage(stage)}：${humanizeStatus(reviewSummary?.[stage]?.status || 'pending')}</span>
       `).join('');
 
       assetReviewCache = assetReview || null;
@@ -1867,34 +1945,34 @@ def build_console_html() -> str:
         <div class="detail-head">
           <div>
             <h2>${runId}</h2>
-            <div class="muted">${runState.source_script_name || 'unnamed source'}</div>
+            <div class="muted">${runState.source_script_name || '未命名任务'}</div>
             <div class="hero-meta" style="margin-top:10px">
               ${statusTag(runState.status)}
-              <span class="pill">current_stage: ${runState.current_stage || 'idle'}</span>
-              ${runState.awaiting_approval_stage ? `<span class="pill">awaiting: ${runState.awaiting_approval_stage}</span>` : ''}
-              <span class="pill">updated: ${runState.updated_at || ''}</span>
+              <span class="pill">当前阶段：${escapeHtml(humanizeStageName(runState.current_stage || '') || '待处理')}</span>
+              ${runState.awaiting_approval_stage ? `<span class="pill">待确认：${escapeHtml(humanizeReviewStage(runState.awaiting_approval_stage))}</span>` : ''}
+              <span class="pill">更新时间：${runState.updated_at || ''}</span>
               ${reviewOverview}
             </div>
           </div>
           <div class="detail-actions">
-            <button class="secondary" onclick="loadRunDetail('${runId}')">Refresh</button>
-            <button class="ghost" onclick="continueRun()">Continue</button>
+            <button class="secondary" onclick="loadRunDetail('${runId}')">刷新当前页</button>
+            <button class="ghost" onclick="continueRun()">继续执行</button>
             <select id="rerun_stage">
-              ${stageOptions.map(stage => `<option value="${stage}">${stage}</option>`).join('')}
+              ${stageOptions.map(stage => `<option value="${stage.value}">${stage.label}</option>`).join('')}
             </select>
-            <button onclick="rerunStage()">Force Rerun Stage</button>
+            <button onclick="rerunStage()">重跑所选阶段</button>
           </div>
         </div>
 
         ${renderRouteDecisionPanel(routeDecision)}
 
         <section class="panel" style="padding:16px">
-          <h2>Stages</h2>
+          <h2>当前流程阶段</h2>
           <div class="stage-grid">${stageCards}</div>
         </section>
 
         <section class="panel" style="padding:16px">
-          <h2>Reviews</h2>
+          <h2>人工确认</h2>
           <div class="review-grid">
             ${renderUpstreamReview(upstreamReview)}
             ${renderAssetImagesReview(assetReview)}
@@ -1913,7 +1991,7 @@ def build_console_html() -> str:
     }
 
     function renderIdlePanel(options = {}) {
-      renderIntoDetailPanel('<div class="empty">选择左侧 run 查看详情，或直接提交一个新任务。</div>', options);
+      renderIntoDetailPanel('<div class="empty">请先从左侧选择一个任务，或直接新建一个任务。</div>', options);
     }
 
     async function loadRightPanel(options = {}) {

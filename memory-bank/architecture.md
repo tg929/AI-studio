@@ -46,6 +46,7 @@ Current role:
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
 - Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
 - Builds stage-aware preview headlines and truncated content summaries from existing workflow artifacts so stage cards can show content instead of raw file paths
+- Uses user-facing Chinese copy for stage preview headlines so operator cards no longer mix filesystem jargon with English prompt-group labels
 - Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
 - Collapses router `risks` / `missing_critical_info` into one lightweight `operator_hint` for the slimmer operator-facing route card
 - Keeps the existing pipeline modules as the stage implementation boundary
@@ -104,6 +105,7 @@ Current role:
 - Renders stage cards with preview headlines and truncated content summaries instead of filesystem paths
 - Switches the right panel into an active-task workspace while a submitted task is queued or running, so operators see current action, process timeline, and live artifact summary instead of stale historical detail
 - Renders a slimmer `系统判断` card above stages so upstream source classification, chosen path, reasoning, and one lightweight hint are visible without opening raw JSON
+- Uses Chinese, creator-facing labels for the main modules, rerun-stage selector, and review-area section titles
 - No longer renders the old bottom `Tasks` block inside the operator-facing run detail
 - Restores browser scroll position during polling-driven right-panel refreshes so reading lower parts of the page is stable while auto-refresh remains enabled
 

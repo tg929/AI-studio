@@ -194,6 +194,46 @@ def _truncate_preview_text(value: Any, *, limit: int = 180) -> tuple[str, bool]:
     return text[: max(0, limit - 3)].rstrip() + "...", True
 
 
+def _humanize_source_kind(source_kind: str) -> str:
+    labels = {
+        "keywords": "关键词",
+        "brief": "简述",
+        "full_script": "完整剧本",
+        "script": "完整剧本",
+        "mixed": "混合输入",
+        "unknown": "待判断",
+    }
+    return labels.get(source_kind, source_kind or "待判断")
+
+
+def _humanize_chosen_path(chosen_path: str) -> str:
+    labels = {
+        "direct_extract": "直接进入资产链路",
+        "compress_then_extract": "先压缩再进入资产链路",
+        "rewrite_then_extract": "先重写再进入资产链路",
+        "expand_then_extract": "先扩写再进入资产链路",
+        "confirm_then_continue": "先停下等待确认",
+        "pending": "待判断",
+    }
+    return labels.get(chosen_path, chosen_path or "待判断")
+
+
+def _humanize_prompt_group(group_name: str) -> str:
+    labels = {
+        "characters": "人物",
+        "scenes": "场景",
+        "props": "道具",
+    }
+    return labels.get(group_name, group_name or "资产")
+
+
+def _humanize_concat_mode(concat_mode: str) -> str:
+    labels = {
+        "ffmpeg_concat_demuxer_reencode": "逐段重编码拼接",
+    }
+    return labels.get(concat_mode, concat_mode)
+
+
 class WorkflowService:
     def __init__(
         self,
@@ -309,7 +349,7 @@ class WorkflowService:
             )
             chosen_path = str(intake_router.get("chosen_path", "")).strip() or "pending"
             reasons = intake_router.get("reasons", []) if isinstance(intake_router.get("reasons"), list) else []
-            preview_headline = f"{source_kind} -> {chosen_path}"
+            preview_headline = f"{_humanize_source_kind(source_kind)} · {_humanize_chosen_path(chosen_path)}"
             script_excerpt = ""
             if script_clean_path.exists():
                 script_excerpt, _ = _truncate_preview_text(script_clean_path.read_text(encoding="utf-8"), limit=160)
@@ -346,10 +386,14 @@ class WorkflowService:
             if prompt_groups:
                 group_name, items = prompt_groups[0]
                 first_item = items[0] if items else {}
-                name = str(first_item.get("name", "")).strip() or str(first_item.get("id", "")).strip() or group_name
+                name = (
+                    str(first_item.get("name", "")).strip()
+                    or str(first_item.get("id", "")).strip()
+                    or _humanize_prompt_group(group_name)
+                )
                 prompt_text = str(first_item.get("prompt", "")).strip()
-                preview_headline = f"{group_name} prompts · {len(items)} items"
-                preview_text = f"{name}: {prompt_text}".strip(": ")
+                preview_headline = f"{_humanize_prompt_group(group_name)}参考说明 {len(items)} 条"
+                preview_text = f"{name}：{prompt_text}".strip("： ")
         elif stage == "asset_images":
             payload = self._read_json_if_exists(run_dir / "05_asset_images" / "asset_images_manifest.json")
             characters = payload.get("characters", []) if isinstance(payload.get("characters"), list) else []
@@ -420,7 +464,12 @@ class WorkflowService:
             shot_count = payload.get("shot_count", "")
             concat_mode = str(payload.get("concat_mode", "")).strip()
             preview_headline = "最终成片已生成" if (run_dir / "10_final" / "final_video.mp4").exists() else "最终成片待生成"
-            preview_text = " ".join(part for part in [f"shot_count={shot_count}" if shot_count else "", concat_mode] if part)
+            preview_parts = []
+            if shot_count:
+                preview_parts.append(f"镜头数：{shot_count}")
+            if concat_mode:
+                preview_parts.append(f"拼接方式：{_humanize_concat_mode(concat_mode)}")
+            preview_text = " · ".join(preview_parts)
 
         if not preview_headline and fallback_message:
             preview_headline, _ = _truncate_preview_text(fallback_message, limit=72)

@@ -458,7 +458,7 @@ class WorkflowStagePreviewTests(unittest.TestCase):
 
         self.assertEqual(asset_stage["preview_headline"], "角色 4 / 场景 1 / 道具 1")
         self.assertIn("萧炎", asset_stage["preview_text"])
-        self.assertEqual(prompt_stage["preview_headline"], "characters prompts · 4 items")
+        self.assertEqual(prompt_stage["preview_headline"], "人物参考说明 4 条")
         self.assertIn("萧炎", prompt_stage["preview_text"])
         self.assertEqual(storyboard_stage["preview_headline"], "正式分镜 6 条")
         self.assertIn("shot_001", storyboard_stage["preview_text"])
@@ -529,11 +529,21 @@ class OperatorConsoleHtmlTests(unittest.TestCase):
         html = build_console_html()
 
         self.assertIn("当前任务", html)
+        self.assertIn("新建任务", html)
+        self.assertIn("任务列表", html)
+        self.assertIn("当前流程阶段", html)
+        self.assertIn("人工确认", html)
+        self.assertIn("处理范围", html)
+        self.assertIn("提前准备镜头草稿", html)
         self.assertIn("提示：", html)
         self.assertNotIn("<strong>Risks</strong>", html)
         self.assertNotIn("<strong>Missing Critical Info</strong>", html)
         self.assertNotIn("<h2>Tasks</h2>", html)
         self.assertNotIn("<h2>Artifacts</h2>", html)
+        self.assertNotIn("阶段概览", html)
+        self.assertNotIn("确认与审核", html)
+        self.assertNotIn("运行目录：", html)
+        self.assertNotIn("处理动作", html)
         self.assertIn("window.scrollTo({top: Math.min(scrollY, maxScroll), behavior: 'auto'})", html)
 
 
