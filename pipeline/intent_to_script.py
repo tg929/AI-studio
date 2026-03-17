@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pipeline.asset_extraction import (
     AssetExtractionArtifacts,
@@ -33,6 +33,7 @@ from schemas.story_blueprint import StoryBlueprint
 
 
 AUTO_INPUT_MODE = "auto"
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1156,7 +1157,31 @@ def generate_script_from_intent(
     input_mode: str = AUTO_INPUT_MODE,
     dry_run: bool = False,
     extract_assets: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> IntentToScriptArtifacts:
+    def emit_progress(
+        message: str,
+        *,
+        step: str,
+        stage: str = "upstream",
+        run_dir: Path | None = None,
+        artifact_path: Path | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        if progress_callback is None:
+            return
+        payload: dict[str, Any] = {
+            "message": message,
+            "step": step,
+            "stage": stage,
+            "run_dir": str((run_dir or artifacts.run_dir).resolve()),
+        }
+        if artifact_path is not None:
+            payload["artifact_path"] = str(artifact_path.resolve())
+        if extra:
+            payload.update(extra)
+        progress_callback(payload)
+
     normalized_source_text = normalize_source_text(source_text)
     if not normalized_source_text:
         raise ValueError("Source input is empty after normalization")
@@ -1164,6 +1189,7 @@ def generate_script_from_intent(
     requested_input_mode = input_mode
     fallback_input_mode = input_mode if input_mode != AUTO_INPUT_MODE else detect_input_mode(normalized_source_text)
     artifacts = build_intent_artifacts(output_root, run_dir)
+    emit_progress("任务已提交，正在创建工作空间。", step="输入接收")
 
     source_input_path = artifacts.source_dir / "source_input.txt"
     source_input_path.write_text(normalized_source_text, encoding="utf-8")
@@ -1177,6 +1203,12 @@ def generate_script_from_intent(
     )
     source_context_path = artifacts.source_dir / "source_context.json"
     write_json(source_context_path, source_context)
+    emit_progress(
+        "正在接收并保存原始输入。",
+        step="输入接收",
+        artifact_path=source_context_path,
+        extra={"fallback_input_mode": fallback_input_mode},
+    )
 
     intake_router_request_path = artifacts.source_dir / "intake_router_request.json"
     intake_router_response_path = artifacts.source_dir / "intake_router_response.json"
@@ -1195,6 +1227,11 @@ def generate_script_from_intent(
         return artifacts
 
     client = build_text_client(model_config)
+    emit_progress(
+        "正在分析输入并选择执行路径。",
+        step="系统判断",
+        artifact_path=intake_router_request_path,
+    )
 
     intake_router_content = run_text_stage(
         client=client,
@@ -1220,6 +1257,15 @@ def generate_script_from_intent(
     )
     intake_router_payload = intake_router.model_dump(mode="json")
     write_json(intake_router_path, intake_router_payload)
+    emit_progress(
+        "系统判断已生成，正在整理后续路径。",
+        step="系统判断",
+        artifact_path=intake_router_path,
+        extra={
+            "chosen_path": intake_router.chosen_path,
+            "source_kind": intake_router.source_form,
+        },
+    )
 
     intent_request_path = artifacts.source_dir / "intent_packet_request.json"
     intent_response_path = artifacts.source_dir / "intent_packet_response.json"
@@ -1247,6 +1293,12 @@ def generate_script_from_intent(
             asset_readiness_response_path,
         ):
             write_stage_skip(path, source_script_name=source_script_name, reason=skip_reason)
+        emit_progress(
+            "系统判断已生成，请确认后继续。",
+            step="系统判断",
+            artifact_path=intake_router_path,
+            extra={"chosen_path": intake_router.chosen_path},
+        )
         return artifacts
 
     intent_packet: IntentPacket | None = None
@@ -1259,6 +1311,12 @@ def generate_script_from_intent(
     )
 
     if intake_router.chosen_path == "direct_extract":
+        emit_progress(
+            "识别为可直接提取的剧本输入，正在整理标准剧本输入。",
+            step="剧本准备",
+            artifact_path=intake_router_path,
+            extra={"chosen_path": intake_router.chosen_path},
+        )
         skip_reason = "chosen_path=direct_extract, reuse normalized source input without upstream rewrite"
         for path in (
             intent_request_path,
@@ -1274,6 +1332,12 @@ def generate_script_from_intent(
         generated_script_text = normalized_source_text
         generation_mode = generation_mode_from_path(intake_router.chosen_path)
     else:
+        emit_progress(
+            "正在生成梗概骨架并整理完整剧本。",
+            step="剧本准备",
+            artifact_path=intake_router_path,
+            extra={"chosen_path": intake_router.chosen_path},
+        )
         intent_user_prompt = build_intent_understanding_user_prompt(
             source_context,
             intake_router_payload,
@@ -1306,6 +1370,11 @@ def generate_script_from_intent(
         )
         intent_packet_path = artifacts.source_dir / "intent_packet.json"
         write_json(intent_packet_path, intent_packet.model_dump(mode="json"))
+        emit_progress(
+            "正在生成梗概骨架。",
+            step="剧本准备",
+            artifact_path=intent_packet_path,
+        )
 
         blueprint_user_prompt = build_story_blueprint_user_prompt(intent_packet.model_dump(mode="json"))
         blueprint_content = run_text_stage(
@@ -1330,6 +1399,11 @@ def generate_script_from_intent(
             )
         )
         write_json(artifacts.source_dir / "story_blueprint.json", story_blueprint.model_dump(mode="json"))
+        emit_progress(
+            "梗概骨架已生成，正在整理完整剧本。",
+            step="剧本准备",
+            artifact_path=artifacts.source_dir / "story_blueprint.json",
+        )
 
         script_generation_user_prompt = build_script_generation_user_prompt(
             intent_packet.model_dump(mode="json"),
@@ -1382,6 +1456,11 @@ def generate_script_from_intent(
     script_clean_json_path = artifacts.input_dir / "script_clean.json"
     script_clean_text_path.write_text(generated_script_text, encoding="utf-8")
     write_json(script_clean_json_path, script_clean_payload)
+    emit_progress(
+        "标准剧本输入已整理完成。",
+        step="剧本准备",
+        artifact_path=script_clean_text_path,
+    )
 
     if intent_packet is not None and story_blueprint is not None:
         quality_user_prompt = build_script_quality_user_prompt(
@@ -1420,6 +1499,11 @@ def generate_script_from_intent(
         intake_router_payload,
         generated_script_text,
     )
+    emit_progress(
+        "正在检查当前剧本是否适合进入资产流程。",
+        step="剧本准备",
+        artifact_path=asset_readiness_request_path,
+    )
     asset_readiness_content = run_text_stage(
         client=client,
         model_config=model_config,
@@ -1446,6 +1530,12 @@ def generate_script_from_intent(
     write_json(
         artifacts.source_dir / "asset_readiness_report.json",
         asset_readiness_report.model_dump(mode="json"),
+    )
+    emit_progress(
+        "上游剧本已准备完成。",
+        step="剧本准备",
+        artifact_path=artifacts.source_dir / "asset_readiness_report.json",
+        extra={"safe_to_extract": asset_readiness_report.safe_to_extract},
     )
 
     asset_dir: Path | None = None

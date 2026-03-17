@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-16
+Last updated: 2026-03-17
 
 ## Current Files
 
@@ -47,6 +47,7 @@ Current role:
 - Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
 - Builds stage-aware preview headlines and truncated content summaries from existing workflow artifacts so stage cards can show content instead of raw file paths
 - Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
+- Collapses router `risks` / `missing_critical_info` into one lightweight `operator_hint` for the slimmer operator-facing route card
 - Keeps the existing pipeline modules as the stage implementation boundary
 
 ### `app/run_state.py`
@@ -76,6 +77,8 @@ Current role:
 - Tracks transient task status for launch, continue, and rerun-stage actions
 - Exposes `awaiting_approval` as a first-class background-task outcome when a run stops at an operator checkpoint
 - Bridges the synchronous workflow service into API-friendly task behavior
+- New fresh-run launches now return a background task immediately instead of synchronously finishing upstream first
+- Persists task-local live progress fields (`progress_message`, `progress_step`, `progress_stage`) so the console can render an active execution workspace before a full run detail is available
 
 ### `app/api.py`
 
@@ -99,7 +102,10 @@ Current role:
 - Displays shot-video cards and the final stitched video directly inside the run detail page
 - Defaults new runs to `input_mode=auto` so source classification is delegated to upstream routing instead of the operator manually selecting an input type
 - Renders stage cards with preview headlines and truncated content summaries instead of filesystem paths
-- Renders a `Route Decision` panel above stages so upstream source classification, chosen path, and operator-facing risks are visible without opening raw JSON
+- Switches the right panel into an active-task workspace while a submitted task is queued or running, so operators see current action, process timeline, and live artifact summary instead of stale historical detail
+- Renders a slimmer `系统判断` card above stages so upstream source classification, chosen path, reasoning, and one lightweight hint are visible without opening raw JSON
+- No longer renders the old bottom `Tasks` block inside the operator-facing run detail
+- Restores browser scroll position during polling-driven right-panel refreshes so reading lower parts of the page is stable while auto-refresh remains enabled
 
 ### `run_operator_console.py`
 
@@ -199,6 +205,7 @@ Current role:
 - Writes the current script candidate into `01_input/script_clean.txt` for downstream reuse
 - Canonicalizes router path and `recommended_operations` when the model returns a valid route with invalid operation ordering
 - Clears stale confirmation flags when the router already selected a concrete non-confirm path and backfills missing confirmation points for real confirm paths
+- Emits short operator-facing progress updates during upstream execution so the console can surface workspace creation, intake routing, script preparation, and readiness progress while `00_source/` / `01_input/` are still being written
 
 ### `prompts/intake_router.py`
 

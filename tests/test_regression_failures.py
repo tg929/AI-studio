@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from app.task_runner import WorkflowTaskRunner
 from app.workflow_service import WorkflowService
+from app.ui import build_console_html
 from pipeline.asset_images import build_jobs_payload, build_sensitive_retry_render_prompt
 from pipeline.intent_to_script import normalize_intake_router_payload, read_json_string as read_stage_json_string
 from pipeline.storyboard import normalize_storyboard_payload, validate_storyboard_against_registry
@@ -470,6 +473,68 @@ class WorkflowStagePreviewTests(unittest.TestCase):
         self.assertEqual(payload["chosen_path"], "compress_then_extract")
         self.assertEqual(payload["project_target"]["target_shot_count"], 6)
         self.assertIn("压缩适配6个10秒镜头", payload["reasoning_summary"])
+        self.assertEqual(payload["operator_hint"], "未指定漫剧美术风格")
+
+
+class WorkflowTaskRunnerTests(unittest.TestCase):
+    def test_launch_run_returns_background_task_before_mainline_finishes(self) -> None:
+        fake_run_root = Path(tempfile.mkdtemp(prefix="task-runner-smoke-"))
+        fake_run_dir = fake_run_root / "run99"
+        mainline_started = mock.Mock()
+
+        service = mock.Mock()
+        service.load_source_script_name.return_value = "test-script"
+
+        def run_mainline(**kwargs):
+            progress_callback = kwargs["progress_callback"]
+            fake_run_dir.mkdir(parents=True, exist_ok=True)
+            progress_callback(
+                {
+                    "message": "正在接收并保存原始输入。",
+                    "step": "输入接收",
+                    "stage": "upstream",
+                    "run_dir": str(fake_run_dir),
+                }
+            )
+            mainline_started()
+            time.sleep(0.1)
+            return {"status": "ok", "run_dir": str(fake_run_dir), "stage": "mainline_workflow_completed"}
+
+        service.run_mainline.side_effect = run_mainline
+        runner = WorkflowTaskRunner(service)
+
+        task = runner.launch_run(source_text="hello world", source_script_name="demo", execution_mode="mainline")
+
+        self.assertEqual(task["action"], "run_mainline")
+        self.assertIn(task["status"], {"queued", "running"})
+        self.assertEqual(task["progress_step"], "输入接收")
+        self.assertEqual(task["run_id"], "")
+
+        deadline = time.time() + 2.0
+        latest = runner.get_task(task["task_id"])
+        while latest is not None and latest["status"] in {"queued", "running"} and time.time() < deadline:
+            time.sleep(0.02)
+            latest = runner.get_task(task["task_id"])
+
+        self.assertIsNotNone(latest)
+        self.assertEqual(mainline_started.call_count, 1)
+        assert latest is not None
+        self.assertEqual(latest["status"], "succeeded")
+        self.assertEqual(latest["run_id"], "run99")
+        self.assertEqual(latest["progress_message"], "正在接收并保存原始输入。")
+
+
+class OperatorConsoleHtmlTests(unittest.TestCase):
+    def test_console_html_uses_active_task_workspace_and_light_hint_copy(self) -> None:
+        html = build_console_html()
+
+        self.assertIn("当前任务", html)
+        self.assertIn("提示：", html)
+        self.assertNotIn("<strong>Risks</strong>", html)
+        self.assertNotIn("<strong>Missing Critical Info</strong>", html)
+        self.assertNotIn("<h2>Tasks</h2>", html)
+        self.assertNotIn("<h2>Artifacts</h2>", html)
+        self.assertIn("window.scrollTo({top: Math.min(scrollY, maxScroll), behavior: 'auto'})", html)
 
 
 if __name__ == "__main__":

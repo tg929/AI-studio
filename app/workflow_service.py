@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import subprocess
-from typing import Any, Iterable, Literal
+from typing import Any, Callable, Iterable, Literal
 
 import httpx
 from pydantic import BaseModel, Field, model_validator
@@ -75,6 +75,8 @@ WorkflowStage = Literal[
     "shot_videos",
     "final_video",
 ]
+
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 REVIEW_CHECKPOINT_STAGE: dict[ReviewStage, WorkflowStage] = {
     "upstream": "upstream",
@@ -448,6 +450,13 @@ class WorkflowService:
         project_target = intake_router.get("project_target")
         if not isinstance(project_target, dict):
             project_target = source_context.get("project_target", {}) if isinstance(source_context.get("project_target"), dict) else {}
+        cleaned_risks = [str(risk).strip() for risk in risks if str(risk).strip()]
+        cleaned_missing_info = [str(item).strip() for item in missing_info if str(item).strip()]
+        operator_hint = ""
+        for candidate in (*cleaned_missing_info, *cleaned_risks):
+            if candidate:
+                operator_hint = candidate
+                break
 
         return {
             "available": True,
@@ -465,8 +474,9 @@ class WorkflowService:
             if isinstance(intake_router.get("confirmation_points"), list)
             else [],
             "reasoning_summary": " / ".join(str(reason).strip() for reason in reasons[:2] if str(reason).strip()),
-            "risks": [str(risk).strip() for risk in risks if str(risk).strip()],
-            "missing_critical_info": [str(item).strip() for item in missing_info if str(item).strip()],
+            "risks": cleaned_risks,
+            "missing_critical_info": cleaned_missing_info,
+            "operator_hint": operator_hint,
             "project_target": {
                 "target_runtime_sec": project_target.get("target_runtime_sec", ""),
                 "target_shot_count": project_target.get("target_shot_count", ""),
@@ -1660,6 +1670,7 @@ class WorkflowService:
         source_script_name: str = "",
         input_mode: Literal["auto", "keywords", "brief", "script"] = AUTO_INPUT_MODE,
         run_dir: str = "",
+        progress_callback: ProgressCallback | None = None,
     ) -> dict[str, Any]:
         try:
             upstream_changed = False
@@ -1683,6 +1694,24 @@ class WorkflowService:
                     effective_source_text = resolved_source_path.read_text(encoding="utf-8")
                     effective_source_name = source_script_name.strip() or resolved_source_path.stem
 
+                def emit_progress(payload: dict[str, Any]) -> None:
+                    if progress_callback is not None:
+                        progress_callback(payload)
+                    resolved_progress_run_dir = str(payload.get("run_dir", "")).strip()
+                    if not resolved_progress_run_dir:
+                        return
+                    message = str(payload.get("message", "")).strip()
+                    if not message:
+                        return
+                    progress_data = {key: value for key, value in payload.items() if key != "message"}
+                    append_run_event(
+                        Path(resolved_progress_run_dir).resolve(),
+                        event_type="operator_progress",
+                        stage=str(payload.get("stage", "upstream")).strip() or "upstream",
+                        message=message,
+                        data=progress_data,
+                    )
+
                 upstream_artifacts = generate_script_from_intent(
                     source_text=effective_source_text,
                     source_script_name=effective_source_name,
@@ -1692,10 +1721,20 @@ class WorkflowService:
                     source_path=resolved_source_path,
                     input_mode=input_mode,
                     extract_assets=False,
+                    progress_callback=emit_progress,
                 )
                 resolved_run_dir = upstream_artifacts.run_dir.resolve()
                 resume_message = "Upstream intake routing finished. Downstream workflow can continue from script_clean.txt."
                 upstream_changed = True
+            if run_dir.strip() and progress_callback is not None:
+                progress_callback(
+                    {
+                        "message": "正在恢复已有运行目录。",
+                        "step": "输入接收",
+                        "stage": "upstream",
+                        "run_dir": str(resolved_run_dir.resolve()),
+                    }
+                )
 
             self.sync_run_state(resolved_run_dir, source_script_name=effective_source_name)
             script_clean_path = resolved_run_dir / "01_input" / "script_clean.txt"
@@ -2058,6 +2097,7 @@ class WorkflowService:
         keep_remote_media: bool = False,
         trim_leading_seconds: float = DEFAULT_TRIM_LEADING_SECONDS,
         blackout_leading_seconds: float = DEFAULT_BLACKOUT_LEADING_SECONDS,
+        progress_callback: ProgressCallback | None = None,
     ) -> dict[str, Any]:
         start_result = self.start_or_resume(
             source_text=source_text,
@@ -2065,6 +2105,7 @@ class WorkflowService:
             source_script_name=source_script_name,
             input_mode=input_mode,
             run_dir=run_dir,
+            progress_callback=progress_callback,
         )
         if start_result.get("status") != "ok":
             return start_result

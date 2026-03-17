@@ -4,6 +4,29 @@ Last updated: 2026-03-17
 
 ## Completed
 
+- Reworked the operator-console task flow so new runs no longer block the browser until upstream finishes:
+  - `POST /api/runs` now returns a background task immediately for fresh runs instead of synchronously waiting for `start_or_resume`
+  - task objects now persist a live `progress_message`, `progress_step`, and `progress_stage` for the active console workspace
+- Added operator-facing upstream progress signals during `intent_to_script`:
+  - the upstream path now emits short human-readable updates for workspace creation, source intake, route analysis, script preparation, and readiness evaluation
+  - the console can now show progress while `00_source/` and `01_input/` artifacts are being created instead of looking idle
+- Reworked the operator-console right panel into an active-task workspace during queued / running execution:
+  - after task submission the right side now switches away from the previously selected run detail
+  - the active workspace now shows `当前任务`, a 6-step operator timeline, and a current artifact summary driven by live task progress plus run-state previews
+  - once the active task leaves `queued/running`, the UI falls back to the normal run detail view
+- Further simplified the operator-console main detail view:
+  - removed the old bottom `Tasks` block from the operator-facing run detail
+  - kept the main detail focused on route judgment, stage cards, review panels, and media outputs
+  - automatic polling now restores the browser scroll position after right-panel re-render, which stops the page from jumping back upward while the operator is reading lower sections
+- Slimmed the `Route Decision` presentation:
+  - the old multi-block `Risks` / `Missing Critical Info` dump is gone from the main UI
+  - the shared workflow service now computes a single `operator_hint`
+  - the console now renders route judgment as one main sentence, four small facts, one reasoning block, and one lightweight hint line
+- Added regression coverage for:
+  - route-decision `operator_hint`
+  - background task launch returning immediately before mainline completion
+  - console HTML rendering the active-task workspace without the old heavy `Risks` blocks
+
 - Added a `run19` partial final-cut deliverable under `runs/run19/10_final/`:
   - concatenated only the first five succeeded shot videos into `final_video_first5.mp4`
   - saved the matching subset concat list as `concat_inputs_first5.txt`

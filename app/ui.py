@@ -631,27 +631,83 @@ def build_console_html() -> str:
       margin-bottom: 6px;
       font-size: 13px;
     }
-    .artifact-list,
-    .event-list,
-    .task-list {
+    .workbench-shell {
+      display: grid;
+      gap: 16px;
+    }
+    .action-panel {
+      padding: 18px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(255, 249, 241, 0.82));
+    }
+    .action-panel h2 {
+      margin-bottom: 8px;
+    }
+    .action-text {
+      font-size: 24px;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+    }
+    .workbench-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .timeline-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .timeline-item {
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      display: grid;
+      gap: 4px;
+    }
+    .timeline-item.active {
+      border-color: rgba(29, 91, 99, 0.24);
+      background: rgba(29, 91, 99, 0.08);
+    }
+    .timeline-item.complete {
+      border-color: rgba(44, 122, 75, 0.18);
+      background: rgba(44, 122, 75, 0.08);
+    }
+    .timeline-item.pending {
+      opacity: 0.72;
+    }
+    .timeline-kicker {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .hint-line {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(30, 34, 32, 0.08);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .workspace-summary {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .event-list {
       display: grid;
       gap: 8px;
     }
-    .artifact-row,
-    .event-row,
-    .task-row {
+    .event-row {
       padding: 12px 14px;
       border-radius: 16px;
       border: 1px solid var(--line);
       background: rgba(255, 255, 255, 0.7);
-    }
-    .artifact-row a {
-      color: var(--accent-2);
-      text-decoration: none;
-      font-weight: 700;
-    }
-    .artifact-row a:hover {
-      text-decoration: underline;
     }
     .code {
       font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
@@ -840,8 +896,11 @@ def build_console_html() -> str:
       'shot_videos',
       'final_video',
     ];
+    const processSteps = ['输入接收', '系统判断', '剧本准备', '资产建立', '参考资产', '正式分镜'];
 
     let selectedRunId = '';
+    let activeTaskId = '';
+    let activeRunId = '';
     let assetReviewCache = null;
     let storyboardReviewCache = null;
     let videoSummaryCache = null;
@@ -900,6 +959,236 @@ def build_console_html() -> str:
       `;
     }
 
+    function humanizeSourceKind(sourceKind) {
+      const labels = {
+        keywords: '关键词',
+        brief: '简述',
+        full_script: '完整剧本',
+        script: '完整剧本',
+        mixed: '混合输入',
+        unknown: '待判断',
+      };
+      return labels[sourceKind] || sourceKind || '待判断';
+    }
+
+    function humanizeChosenPath(path) {
+      const labels = {
+        direct_extract: '直接进入资产链路',
+        compress_then_extract: '先压缩再进入资产链路',
+        rewrite_then_extract: '先重写再进入资产链路',
+        expand_then_extract: '先扩写再进入资产链路',
+        confirm_then_continue: '先停下等待确认',
+        pending: '待判断',
+      };
+      return labels[path] || path || '待判断';
+    }
+
+    function humanizeTaskStatus(status) {
+      const labels = {
+        queued: '排队中',
+        running: '执行中',
+        succeeded: '已完成',
+        failed: '执行失败',
+        blocked: '已阻塞',
+        partial: '部分完成',
+        awaiting_approval: '等待确认',
+      };
+      return labels[status] || status || '未知状态';
+    }
+
+    function buildRouteDecisionHeadline(routeDecision) {
+      const sourceKind = humanizeSourceKind(routeDecision?.source_kind);
+      const chosenPath = humanizeChosenPath(routeDecision?.chosen_path);
+      return `识别为${sourceKind}，系统将${chosenPath}。`;
+    }
+
+    function renderRouteDecisionCore(routeDecision) {
+      const projectTarget = routeDecision?.project_target || {};
+      const reasoning = truncate(routeDecision?.reasoning_summary || '系统正在整理这次输入的判断依据。', 180);
+      const operatorHint = truncate(routeDecision?.operator_hint || '', 90);
+      return `
+        <div class="summary-box">
+          <strong>本次判断</strong>
+          <div>${escapeHtml(buildRouteDecisionHeadline(routeDecision))}</div>
+        </div>
+        <div class="summary-grid">
+          ${renderSummaryBox('输入判定', humanizeSourceKind(routeDecision?.source_kind))}
+          ${renderSummaryBox('执行路径', humanizeChosenPath(routeDecision?.chosen_path))}
+          ${renderSummaryBox('目标时长', projectTarget.target_runtime_sec || 'N/A')}
+          ${renderSummaryBox('目标镜头', projectTarget.target_shot_count || 'N/A')}
+        </div>
+        <div class="workspace-summary">
+          <div class="summary-box">
+            <strong>判断依据</strong>
+            <div class="muted">${escapeHtml(reasoning)}</div>
+          </div>
+        </div>
+        ${operatorHint ? `<div class="hint-line">提示：${escapeHtml(operatorHint)}</div>` : ''}
+      `;
+    }
+
+    function stageToProcessStep(stageName) {
+      if (!stageName) return '输入接收';
+      if (stageName === 'upstream') return '剧本准备';
+      if (['asset_extraction', 'style_bible', 'asset_prompts'].includes(stageName)) return '资产建立';
+      if (stageName === 'asset_images') return '参考资产';
+      if (['storyboard_seed', 'storyboard', 'shot_reference_boards', 'board_publish', 'video_jobs', 'shot_videos', 'final_video'].includes(stageName)) {
+        return '正式分镜';
+      }
+      return '剧本准备';
+    }
+
+    function resolveTaskProcessStep(task, runPayload) {
+      if (processSteps.includes(task?.progress_step)) {
+        return task.progress_step;
+      }
+      return stageToProcessStep(runPayload?.run_state?.current_stage || task?.progress_stage || '');
+    }
+
+    function fallbackCurrentAction(task, runPayload) {
+      const runState = runPayload?.run_state || {};
+      if (task?.progress_message) {
+        return task.progress_message;
+      }
+      if (runState.awaiting_approval_stage) {
+        return `当前产物已生成，请先确认 ${runState.awaiting_approval_stage} 后继续。`;
+      }
+      const stageName = runState.current_stage || task?.progress_stage || '';
+      const labels = {
+        upstream: '正在整理标准剧本输入。',
+        asset_extraction: '正在抽取角色、场景和道具。',
+        style_bible: '正在建立统一风格基线。',
+        asset_prompts: '正在整理参考资产生成说明。',
+        asset_images: '正在生成参考资产图。',
+        storyboard: '正在生成生产级分镜。',
+      };
+      return labels[stageName] || '系统正在处理当前任务。';
+    }
+
+    function renderProcessTimeline(task, runPayload) {
+      const currentStep = resolveTaskProcessStep(task, runPayload);
+      const currentIndex = Math.max(0, processSteps.indexOf(currentStep));
+      const taskStatus = task?.status || 'running';
+      return `
+        <section class="panel" style="padding:16px">
+          <h2>执行流程</h2>
+          <div class="timeline-list">
+            ${processSteps.map((step, index) => {
+              let statusClass = 'pending';
+              let statusText = '待开始';
+              if (index < currentIndex || (taskStatus === 'succeeded' && index <= currentIndex)) {
+                statusClass = 'complete';
+                statusText = '已完成';
+              } else if (index === currentIndex) {
+                statusClass = taskStatus === 'failed' || taskStatus === 'blocked' ? 'failed' : 'active';
+                statusText = taskStatus === 'failed' || taskStatus === 'blocked' ? '异常中断' : '处理中';
+              }
+              return `
+                <div class="timeline-item ${statusClass}">
+                  <div class="meta-line">
+                    <strong>${escapeHtml(step)}</strong>
+                    <span class="timeline-kicker">${escapeHtml(statusText)}</span>
+                  </div>
+                  <div class="muted">${index === currentIndex ? escapeHtml(fallbackCurrentAction(task, runPayload)) : ' '}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderCurrentArtifactSummary(task, runPayload) {
+      if (!runPayload) {
+        return `
+          <section class="panel" style="padding:16px">
+            <h2>当前产物摘要</h2>
+            <div class="summary-box">
+              <strong>系统正在准备</strong>
+              <div class="muted">${escapeHtml(task?.progress_message || '任务已提交，正在创建工作空间。')}</div>
+            </div>
+          </section>
+        `;
+      }
+
+      const routeDecision = runPayload.route_decision || {};
+      const runState = runPayload.run_state || {};
+      const currentStageName = runState.current_stage || task?.progress_stage || 'upstream';
+      const stagePayload = (runState.stages || {})[currentStageName] || (runState.stages || {}).upstream || {};
+
+      if (routeDecision.available && resolveTaskProcessStep(task, runPayload) === '系统判断') {
+        return `
+          <section class="panel" style="padding:16px">
+            <h2>当前产物摘要</h2>
+            ${renderRouteDecisionCore(routeDecision)}
+          </section>
+        `;
+      }
+
+      return `
+        <section class="panel" style="padding:16px">
+          <h2>当前产物摘要</h2>
+          <div class="summary-box">
+            <strong>${escapeHtml(stagePayload.preview_headline || currentStageName || '当前阶段')}</strong>
+            <div class="muted">${escapeHtml(stagePayload.preview_text || stagePayload.message || fallbackCurrentAction(task, runPayload))}</div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderActiveTaskPanel(task, runPayload, events) {
+      const runState = runPayload?.run_state || {};
+      const latestRunId = task?.run_id || runState.run_id || activeRunId || 'pending';
+      const recentEvents = (events || []).slice(-5).reverse();
+      const eventRows = recentEvents.length ? recentEvents.map(event => `
+        <div class="event-row">
+          <div class="meta-line">
+            <strong>${escapeHtml(event.message || event.event_type || 'event')}</strong>
+            <span class="muted">${escapeHtml(event.timestamp || '')}</span>
+          </div>
+          <div class="muted">${escapeHtml(event.stage || '')}</div>
+        </div>
+      `).join('') : '<div class="empty">系统正在准备更多过程信息。</div>';
+
+      return `
+        <div class="workbench-shell">
+          <section class="action-panel">
+            <div class="timeline-kicker">当前任务</div>
+            <div class="action-text">${escapeHtml(fallbackCurrentAction(task, runPayload))}</div>
+            <div class="workbench-meta">
+              <span class="pill">task: ${escapeHtml(task?.task_id || '')}</span>
+              <span class="pill">run: ${escapeHtml(latestRunId)}</span>
+              <span class="pill">状态: ${escapeHtml(humanizeTaskStatus(task?.status || 'running'))}</span>
+              ${task?.progress_step ? `<span class="pill">流程: ${escapeHtml(task.progress_step)}</span>` : ''}
+            </div>
+          </section>
+          ${renderProcessTimeline(task, runPayload)}
+          ${renderCurrentArtifactSummary(task, runPayload)}
+          <section class="panel" style="padding:16px">
+            <div class="meta-line">
+              <h2 style="margin:0">执行过程</h2>
+              ${task?.run_id ? `<button class="ghost" onclick="focusRunDetail()">查看完整详情</button>` : ''}
+            </div>
+            <div class="event-list" style="margin-top:14px">${eventRows}</div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderIntoDetailPanel(html, options = {}) {
+      const root = document.getElementById('run_detail_panel');
+      if (!root) return;
+      const preserveViewport = Boolean(options.preserveViewport);
+      const scrollY = preserveViewport ? window.scrollY : 0;
+      root.innerHTML = html;
+      if (preserveViewport) {
+        requestAnimationFrame(() => {
+          const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+          window.scrollTo({top: Math.min(scrollY, maxScroll), behavior: 'auto'});
+        });
+      }
+    }
+
     function renderReviewSection(stage, title, reviewPayload, bodyHtml) {
       const review = reviewPayload?.review || {status: 'pending', reviewer: '', notes: ''};
       return `
@@ -938,61 +1227,16 @@ def build_console_html() -> str:
       if (!routeDecision || !routeDecision.available) {
         return `
           <section class="panel" style="padding:16px">
-            <h2>Route Decision</h2>
-            <div class="empty" style="margin-top:14px">当前 run 还没有可展示的 route decision。</div>
+            <h2>系统判断</h2>
+            <div class="empty" style="margin-top:14px">当前 run 还没有可展示的系统判断。</div>
           </section>
         `;
       }
 
-      const projectTarget = routeDecision.project_target || {};
-      const recommendedOperations = Array.isArray(routeDecision.recommended_operations) ? routeDecision.recommended_operations : [];
-      const risks = Array.isArray(routeDecision.risks) ? routeDecision.risks : [];
-      const missingInfo = Array.isArray(routeDecision.missing_critical_info) ? routeDecision.missing_critical_info : [];
-      const confirmationPoints = Array.isArray(routeDecision.confirmation_points) ? routeDecision.confirmation_points : [];
-
       return `
         <section class="panel" style="padding:16px; margin-top:18px">
-          <h2>Route Decision</h2>
-          <div class="summary-grid">
-            ${renderSummaryBox('source_kind', routeDecision.source_kind)}
-            ${renderSummaryBox('material_state', routeDecision.material_state)}
-            ${renderSummaryBox('chosen_path', routeDecision.chosen_path)}
-            ${renderSummaryBox('asset_readiness', routeDecision.asset_readiness_estimate)}
-            ${renderSummaryBox('target_runtime_sec', projectTarget.target_runtime_sec || 'N/A')}
-            ${renderSummaryBox('target_shot_count', projectTarget.target_shot_count || 'N/A')}
-          </div>
-          <div class="stack" style="margin-top:14px">
-            <div class="summary-box">
-              <strong>Reasoning Summary</strong>
-              <div class="muted">${escapeHtml(routeDecision.reasoning_summary || 'No reasoning summary.')}</div>
-            </div>
-            <div class="summary-box">
-              <strong>Recommended Operations</strong>
-              <div class="muted">${escapeHtml(recommendedOperations.join(' / ') || 'None')}</div>
-            </div>
-            ${routeDecision.needs_confirmation ? `
-              <div class="summary-box">
-                <strong>Confirmation Points</strong>
-                <div class="muted">${escapeHtml(confirmationPoints.join(' / ') || 'Operator confirmation required')}</div>
-              </div>
-            ` : ''}
-            ${risks.length ? `
-              <div class="summary-box">
-                <strong>Risks</strong>
-                <div class="note-list">
-                  ${risks.slice(0, 3).map(item => `<div class="note-item">${escapeHtml(item)}</div>`).join('')}
-                </div>
-              </div>
-            ` : ''}
-            ${missingInfo.length ? `
-              <div class="summary-box">
-                <strong>Missing Critical Info</strong>
-                <div class="note-list">
-                  ${missingInfo.slice(0, 3).map(item => `<div class="note-item">${escapeHtml(item)}</div>`).join('')}
-                </div>
-              </div>
-            ` : ''}
-          </div>
+          <h2>系统判断</h2>
+          ${renderRouteDecisionCore(routeDecision)}
         </section>
       `;
     }
@@ -1478,7 +1722,7 @@ def build_console_html() -> str:
       storyboardSelectedShotId = '';
       shotVideoFilter = 'all';
       await loadRuns();
-      await loadRunDetail(runId);
+      await loadRightPanel();
     }
 
     async function createRun() {
@@ -1499,6 +1743,8 @@ def build_console_html() -> str:
           body: JSON.stringify(payload),
         });
         statusBox.textContent = `任务已提交: ${result.task_id || 'sync-result'} / ${result.run_id || result.run_dir || ''}`;
+        activeTaskId = result.task_id || '';
+        activeRunId = result.run_id || '';
         if (result.run_id) {
           selectedRunId = result.run_id;
           assetImageFilter = 'all';
@@ -1507,11 +1753,17 @@ def build_console_html() -> str:
           shotVideoFilter = 'all';
         }
         await loadRuns();
-        if (selectedRunId) {
-          await loadRunDetail(selectedRunId);
-        }
+        await loadRightPanel();
       } catch (error) {
         statusBox.textContent = `提交失败: ${error.message}`;
+      }
+    }
+
+    function focusRunDetail() {
+      activeTaskId = '';
+      activeRunId = '';
+      if (selectedRunId) {
+        loadRunDetail(selectedRunId).catch(console.error);
       }
     }
 
@@ -1521,8 +1773,9 @@ def build_console_html() -> str:
         method: 'POST',
         body: JSON.stringify({parallel_planning: false}),
       });
-      await loadRunDetail(selectedRunId);
-      alert(`continue task submitted: ${result.task_id}`);
+      activeTaskId = result.task_id || '';
+      activeRunId = selectedRunId;
+      await loadRightPanel();
     }
 
     async function rerunStage() {
@@ -1532,15 +1785,44 @@ def build_console_html() -> str:
         method: 'POST',
         body: JSON.stringify({force: true}),
       });
-      await loadRunDetail(selectedRunId);
-      alert(`rerun task submitted: ${result.task_id}`);
+      activeTaskId = result.task_id || '';
+      activeRunId = selectedRunId;
+      await loadRightPanel();
     }
 
-    async function loadRunDetail(runId) {
-      const [runPayload, eventPayload, taskPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
+    async function loadActiveTaskPanel(taskId, options = {}) {
+      const task = await safeApi(`/api/tasks/${taskId}`);
+      if (!task) {
+        activeTaskId = '';
+        activeRunId = '';
+        return false;
+      }
+
+      if (task.run_id) {
+        activeRunId = task.run_id;
+        selectedRunId = task.run_id;
+      }
+
+      if (!['queued', 'running'].includes(task.status)) {
+        activeTaskId = '';
+        return false;
+      }
+
+      let runPayload = null;
+      let events = [];
+      if (task.run_id) {
+        runPayload = await safeApi(`/api/runs/${task.run_id}`);
+        const eventPayload = await safeApi(`/api/runs/${task.run_id}/events?limit=24`);
+        events = eventPayload?.events || [];
+      }
+
+      renderIntoDetailPanel(renderActiveTaskPanel(task, runPayload, events), options);
+      return true;
+    }
+
+    async function loadRunDetail(runId, options = {}) {
+      const [runPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
         api(`/api/runs/${runId}`),
-        api(`/api/runs/${runId}/events?limit=30`),
-        api(`/api/runs/${runId}/tasks?limit=12`),
         safeApi(`/api/runs/${runId}/videos`),
         safeApi(`/api/runs/${runId}/reviews`),
         safeApi(`/api/runs/${runId}/reviews/upstream`),
@@ -1552,8 +1834,6 @@ def build_console_html() -> str:
       const routeDecision = runPayload.route_decision || {};
       const stages = runState.stages || {};
       const stageOrder = runState.stage_order || [];
-      const events = (eventPayload.events || []).slice().reverse();
-      const tasks = taskPayload.tasks || [];
       const reviewSummary = reviewsPayload?.reviews?.reviews || {};
 
       const stageCards = stageOrder.map(stageName => {
@@ -1571,29 +1851,6 @@ def build_console_html() -> str:
         `;
       }).join('');
 
-      const eventRows = events.map(event => `
-        <div class="event-row">
-          <div class="meta-line">
-            <strong>${event.event_type || 'event'}</strong>
-            <span class="muted">${event.timestamp || ''}</span>
-          </div>
-          <div class="muted">${event.stage || ''}</div>
-          <div>${event.message || ''}</div>
-        </div>
-      `).join('') || '<div class="empty">当前没有事件记录。</div>';
-
-      const taskRows = tasks.map(task => `
-        <div class="task-row">
-          <div class="meta-line">
-            <strong>${task.action}</strong>
-            ${statusTag(task.status)}
-          </div>
-          <div class="muted">${task.task_id}</div>
-          <div class="muted">${task.stage || ''}</div>
-          <div>${task.error || ''}</div>
-        </div>
-      `).join('') || '<div class="empty">当前没有后台任务。</div>';
-
       const reviewOverview = ['upstream', 'asset_images', 'storyboard'].map(stage => `
         <span class="pill">${stage}: ${reviewSummary?.[stage]?.status || 'pending'}</span>
       `).join('');
@@ -1606,7 +1863,7 @@ def build_console_html() -> str:
         storyboardSelectedShotId = storyboardShots[0]?.shot_id || '';
       }
 
-      document.getElementById('run_detail_panel').innerHTML = `
+      renderIntoDetailPanel(`
         <div class="detail-head">
           <div>
             <h2>${runId}</h2>
@@ -1648,32 +1905,37 @@ def build_console_html() -> str:
         ${renderShotVideosPanel(videoSummaryCache)}
 
         ${renderFinalVideoPanel(videoSummaryCache)}
-
-        <section class="panel" style="padding:16px">
-          <h2>Tasks</h2>
-          <div class="task-list">${taskRows}</div>
-        </section>
-
-        <section class="panel" style="padding:16px">
-          <h2>Recent Events</h2>
-          <div class="event-list">${eventRows}</div>
-        </section>
-      `;
+      `, options);
 
       paintAssetImagesReview();
       paintStoryboardReview();
       paintShotVideosSection();
     }
 
-    async function pollCurrentRun() {
-      if (!selectedRunId) {
+    function renderIdlePanel(options = {}) {
+      renderIntoDetailPanel('<div class="empty">选择左侧 run 查看详情，或直接提交一个新任务。</div>', options);
+    }
+
+    async function loadRightPanel(options = {}) {
+      if (activeTaskId) {
+        const handled = await loadActiveTaskPanel(activeTaskId, options);
+        if (handled) {
+          return;
+        }
+      }
+      if (selectedRunId) {
+        await loadRunDetail(selectedRunId, options);
         return;
       }
+      renderIdlePanel(options);
+    }
+
+    async function pollCurrentRun() {
       if (isMediaModalOpen() || hasActiveVideoPlayback()) {
         return;
       }
       try {
-        await loadRunDetail(selectedRunId);
+        await loadRightPanel({preserveViewport: true});
         await loadRuns();
       } catch (error) {
         console.error(error);
@@ -1686,7 +1948,7 @@ def build_console_html() -> str:
       }
     });
 
-    loadRuns().catch(console.error);
+    Promise.all([loadRuns(), loadRightPanel()]).catch(console.error);
     setInterval(pollCurrentRun, 6000);
   </script>
 </body>
