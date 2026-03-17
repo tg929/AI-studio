@@ -45,6 +45,7 @@ Current role:
 - Persists stage outcomes through the run-state helpers
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
 - Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
+- Builds stage-aware preview headlines and truncated content summaries from existing workflow artifacts so stage cards can show content instead of raw file paths
 - Keeps the existing pipeline modules as the stage implementation boundary
 
 ### `app/run_state.py`
@@ -95,6 +96,8 @@ Current role:
 - Surfaces the current `awaiting_approval_stage` directly in the run detail header
 - Adds richer operator review interactions for `asset_images` and `storyboard`, including filters, search, lightbox preview, shot navigation, and reference-asset inspection
 - Displays shot-video cards and the final stitched video directly inside the run detail page
+- Defaults new runs to `input_mode=auto` so source classification is delegated to upstream routing instead of the operator manually selecting an input type
+- Renders stage cards with preview headlines and truncated content summaries instead of filesystem paths
 
 ### `run_operator_console.py`
 

@@ -776,24 +776,14 @@ def build_console_html() -> str:
             <label>Source Name
               <input id="source_script_name" placeholder="intent_input / 剧本名" />
             </label>
-            <div class="row">
-              <label>Input Mode
-                <select id="input_mode">
-                  <option value="auto">auto</option>
-                  <option value="keywords">keywords</option>
-                  <option value="brief">brief</option>
-                  <option value="script">script</option>
-                </select>
-              </label>
-              <label>Execution
-                <select id="execution_mode">
-                  <option value="mainline">mainline</option>
-                  <option value="upstream_only">upstream_only</option>
-                </select>
-              </label>
-            </div>
+            <label>Execution
+              <select id="execution_mode">
+                <option value="mainline">mainline</option>
+                <option value="upstream_only">upstream_only</option>
+              </select>
+            </label>
             <label>Source Text
-              <textarea id="source_text" placeholder="输入关键词、brief 或完整剧本。新建 run 时填这个，恢复旧 run 时可以留空。"></textarea>
+              <textarea id="source_text" placeholder="输入关键词、brief 或完整剧本。系统会自动判断输入类型并选择上游路由。"></textarea>
             </label>
             <label>Parallel Planning
               <select id="parallel_planning">
@@ -1431,7 +1421,7 @@ def build_console_html() -> str:
     async function createRun() {
       const payload = {
         source_script_name: document.getElementById('source_script_name').value,
-        input_mode: document.getElementById('input_mode').value,
+        input_mode: 'auto',
         execution_mode: document.getElementById('execution_mode').value,
         run_dir: '',
         source_path: '',
@@ -1512,9 +1502,9 @@ def build_console_html() -> str:
               <strong>${stageName}</strong>
               ${statusTag(stage.status)}
             </div>
-            <div class="muted">${stage.message || 'No stage message yet.'}</div>
+            ${stage.preview_headline ? `<div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_headline)}</div>` : ''}
+            <div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_text || stage.message || 'No stage summary yet.')}</div>
             <div class="muted" style="margin-top:10px">${stage.updated_at || ''}</div>
-            <div class="code" style="margin-top:10px">${stage.artifact_path || ''}</div>
           </div>
         `;
       }).join('');

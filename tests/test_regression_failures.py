@@ -296,5 +296,38 @@ class WorkflowVideoPayloadTests(unittest.TestCase):
         self.assertTrue(shot_001["included_in_final"])
 
 
+class WorkflowStagePreviewTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        config_stub = SimpleNamespace(model_name="stub-model", base_url="http://example.invalid")
+        cls._patches = [
+            mock.patch("app.workflow_service.load_text_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_image_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_video_model_config", return_value=config_stub),
+        ]
+        for patcher in cls._patches:
+            patcher.start()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for patcher in reversed(cls._patches):
+            patcher.stop()
+
+    def test_inspect_run_enriches_stage_cards_with_preview_text(self) -> None:
+        service = WorkflowService(output_root=PROJECT_ROOT / "runs", env_file=None)
+
+        payload = service.inspect_run(PROJECT_ROOT / "runs" / "run10")["run_state"]
+        asset_stage = payload["stages"]["asset_extraction"]
+        prompt_stage = payload["stages"]["asset_prompts"]
+        storyboard_stage = payload["stages"]["storyboard"]
+
+        self.assertEqual(asset_stage["preview_headline"], "角色 4 / 场景 1 / 道具 1")
+        self.assertIn("萧炎", asset_stage["preview_text"])
+        self.assertEqual(prompt_stage["preview_headline"], "characters prompts · 4 items")
+        self.assertIn("萧炎", prompt_stage["preview_text"])
+        self.assertEqual(storyboard_stage["preview_headline"], "正式分镜 6 条")
+        self.assertIn("shot_001", storyboard_stage["preview_text"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -192,6 +192,8 @@ Last updated: 2026-03-16
   - prompt-only tuning is helping most on characters and much less on scenes / props
 - Added a standalone `workflow_overview.html` page that visualizes the current code-level pipeline from upstream routing through final video concatenation in a reference-diagram style.
 - Adjusted the operator-console video layout so `Shot Videos` appears above `Final Video`, and paused automatic run-detail polling while any console video is actively playing or the media modal is open so local playback previews no longer get interrupted by DOM re-rendering.
+- Upgraded operator-console stage cards from raw artifact-path display to stage-aware content previews generated in the shared workflow service, so cards now summarize extracted assets, style direction, prompt content, storyboard shots, and downstream media progress directly from artifacts.
+- Removed the explicit `input_mode` selector from the operator-console create form; new UI launches now default to `input_mode=auto` so upstream routing owns input-type classification instead of the operator manually selecting it.
 
 ## Current Phase
 
