@@ -295,11 +295,12 @@ class WorkflowTaskRunner:
         source_script_name = self.service.load_source_script_name(resolved_run_dir)
         task = self._build_task(action="continue_mainline", run_dir=resolved_run_dir, stage="")
 
-        def run_job(_progress_callback: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        def run_job(progress_callback: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
             return self.service.run_mainline(
                 run_dir=str(resolved_run_dir),
                 source_script_name=source_script_name,
                 parallel_planning=parallel_planning,
+                progress_callback=progress_callback,
             )
 
         launched = self._start_task(task, run_job)

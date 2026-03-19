@@ -234,14 +234,17 @@ def create_api_app(
         run_dir = workflow_service.output_root / run_id
         if not run_dir.exists():
             raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
-        return workflow_service.submit_review(
-            run_dir,
-            stage=stage,
-            status=request.status,
-            reviewer=request.reviewer,
-            notes=request.notes,
-            metadata=request.metadata,
-        )
+        try:
+            return workflow_service.submit_review(
+                run_dir,
+                stage=stage,
+                status=request.status,
+                reviewer=request.reviewer,
+                notes=request.notes,
+                metadata=request.metadata,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/media/{run_id}/{relative_path:path}")
     def read_run_media(run_id: str, relative_path: str) -> FileResponse:

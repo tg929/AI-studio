@@ -1,8 +1,16 @@
 # Progress
 
-Last updated: 2026-03-17
+Last updated: 2026-03-18
 
 ## Completed
+
+- Fixed two operator-console workflow-state regressions exposed by `run22`:
+  - `continue_mainline` tasks now forward live progress callbacks into `run_mainline`, so resumed upstream generation no longer appears frozen at `输入接收`
+  - review approvals now reject missing checkpoint artifacts, and workflow-state sync now auto-resets stale approved checkpoint reviews plus stale succeeded checkpoint stages when the backing artifact file does not exist
+- Added regression coverage for:
+  - rejecting checkpoint approval without its artifact
+  - auto-repairing stale approved checkpoint state during run inspection
+  - forwarding progress updates for `continue_mainline` tasks
 
 - Reworked the operator-console task flow so new runs no longer block the browser until upstream finishes:
   - `POST /api/runs` now returns a background task immediately for fresh runs instead of synchronously waiting for `start_or_resume`

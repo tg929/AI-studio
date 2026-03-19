@@ -44,6 +44,7 @@ from .run_state import (
     ensure_run_state,
     load_run_state,
     run_state_path,
+    utc_now_iso,
     update_stage_state,
     write_run_state,
 )
@@ -52,6 +53,7 @@ from .review_state import (
     ReviewStage,
     ensure_reviews,
     update_review,
+    write_reviews,
 )
 
 
@@ -1203,12 +1205,47 @@ class WorkflowService:
 
     def sync_run_state(self, run_dir: Path, *, source_script_name: str = "") -> RunState:
         state = ensure_run_state(run_dir, source_script_name=source_script_name)
-        ensure_reviews(run_dir)
+        reviews = ensure_reviews(run_dir)
         changed = False
         effective_source_name = source_script_name or state.source_script_name or self.load_source_script_name(run_dir)
         if effective_source_name and not state.source_script_name:
             state.source_script_name = effective_source_name
             changed = True
+
+        reviews_changed = False
+        repair_timestamp = utc_now_iso()
+        for review_stage in REVIEW_STAGE_ORDER:
+            checkpoint_stage = REVIEW_CHECKPOINT_STAGE[review_stage]
+            artifact_path = self.canonical_stage_artifact_path(run_dir, checkpoint_stage)
+            review = reviews.reviews.get(review_stage)
+            stage_state = state.stages.get(checkpoint_stage)
+
+            if review is not None and review.status == "approved" and not artifact_path.exists():
+                review.status = "pending"
+                review.reviewer = ""
+                review.notes = ""
+                review.updated_at = repair_timestamp
+                review.metadata["auto_reset_missing_artifact"] = True
+                review.metadata["checkpoint_stage"] = checkpoint_stage
+                reviews.updated_at = repair_timestamp
+                reviews_changed = True
+
+            if stage_state is None or artifact_path.exists():
+                continue
+            if stage_state.status != "succeeded":
+                continue
+
+            stage_state.status = "pending"
+            stage_state.message = ""
+            stage_state.artifact_path = ""
+            stage_state.finished_at = ""
+            stage_state.updated_at = repair_timestamp
+            if state.current_stage == checkpoint_stage:
+                state.current_stage = ""
+            changed = True
+
+        if reviews_changed:
+            write_reviews(run_dir, reviews)
 
         latest_succeeded_stage = ""
         for stage in (*CORE_STAGE_ORDER, *OPTIONAL_STAGE_ORDER):
@@ -1520,6 +1557,10 @@ class WorkflowService:
         effective_source_name = self.load_source_script_name(resolved_run_dir)
         checkpoint_stage = REVIEW_CHECKPOINT_STAGE[stage]
         artifact_path = self.canonical_stage_artifact_path(resolved_run_dir, checkpoint_stage)
+        if status == "approved" and not artifact_path.exists():
+            raise ValueError(
+                f"Cannot approve `{stage}` because the checkpoint artifact is missing: {artifact_path}"
+            )
         reviews = update_review(
             resolved_run_dir,
             stage=stage,

@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from app.review_state import update_review
+from app.run_state import update_stage_state
 from app.task_runner import WorkflowTaskRunner
 from app.workflow_service import WorkflowService
 from app.ui import build_console_html
@@ -264,6 +266,8 @@ class WorkflowReviewGateTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
         self.service = WorkflowService(output_root=self.output_root, env_file=None)
+        (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "01_input" / "script_clean.txt").write_text("normalized script", encoding="utf-8")
 
     def write_json(self, path: Path, payload: dict[str, object]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -335,6 +339,28 @@ class WorkflowReviewGateTests(unittest.TestCase):
         self.assertEqual(run_state["status"], "running")
         self.assertEqual(run_state["awaiting_approval_stage"], "")
         self.assertEqual(run_state["stages"]["asset_images"]["status"], "succeeded")
+
+    def test_submit_review_rejects_approval_when_checkpoint_artifact_is_missing(self) -> None:
+        (self.run_dir / "01_input" / "script_clean.txt").unlink()
+
+        with self.assertRaisesRegex(ValueError, "checkpoint artifact is missing"):
+            self.service.submit_review(self.run_dir, stage="upstream", status="approved")
+
+    def test_sync_run_state_resets_missing_checkpoint_artifact_approvals(self) -> None:
+        update_review(self.run_dir, stage="asset_images", status="approved", reviewer="operator")
+        update_stage_state(
+            self.run_dir,
+            stage="asset_images",
+            status="succeeded",
+            artifact_path=str((self.run_dir / "05_asset_images" / "asset_images_manifest.json").resolve()),
+        )
+
+        run_state = self.service.inspect_run(self.run_dir)["run_state"]
+        review = self.service.get_review(self.run_dir, "asset_images")["review"]
+
+        self.assertEqual(review["status"], "pending")
+        self.assertTrue(review["metadata"]["auto_reset_missing_artifact"])
+        self.assertEqual(run_state["stages"]["asset_images"]["status"], "pending")
 
     def test_resume_auto_approves_legacy_checkpoint_reviews_from_existing_artifacts(self) -> None:
         (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
@@ -522,6 +548,42 @@ class WorkflowTaskRunnerTests(unittest.TestCase):
         self.assertEqual(latest["status"], "succeeded")
         self.assertEqual(latest["run_id"], "run99")
         self.assertEqual(latest["progress_message"], "正在接收并保存原始输入。")
+
+    def test_launch_continue_run_propagates_progress_callback(self) -> None:
+        fake_run_root = Path(tempfile.mkdtemp(prefix="task-runner-continue-"))
+        fake_run_dir = fake_run_root / "run100"
+        fake_run_dir.mkdir(parents=True, exist_ok=True)
+
+        service = mock.Mock()
+        service.load_source_script_name.return_value = "test-script"
+
+        def run_mainline(**kwargs):
+            progress_callback = kwargs["progress_callback"]
+            progress_callback(
+                {
+                    "message": "正在恢复已有运行目录。",
+                    "step": "输入接收",
+                    "stage": "upstream",
+                    "run_dir": str(fake_run_dir),
+                }
+            )
+            return {"status": "ok", "run_dir": str(fake_run_dir), "stage": "mainline_workflow_completed"}
+
+        service.run_mainline.side_effect = run_mainline
+        runner = WorkflowTaskRunner(service)
+
+        task = runner.launch_continue_run(run_dir=str(fake_run_dir))
+
+        deadline = time.time() + 2.0
+        latest = runner.get_task(task["task_id"])
+        while latest is not None and latest["status"] in {"queued", "running"} and time.time() < deadline:
+            time.sleep(0.02)
+            latest = runner.get_task(task["task_id"])
+
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        self.assertEqual(latest["status"], "succeeded")
+        self.assertEqual(latest["progress_message"], "正在恢复已有运行目录。")
 
 
 class OperatorConsoleHtmlTests(unittest.TestCase):

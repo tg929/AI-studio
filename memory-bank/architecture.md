@@ -50,6 +50,8 @@ Current role:
 - Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
 - Collapses router `risks` / `missing_critical_info` into one lightweight `operator_hint` for the slimmer operator-facing route card
 - Keeps the existing pipeline modules as the stage implementation boundary
+- Rejects checkpoint review approvals when the required checkpoint artifact file is missing
+- Auto-resets stale approved checkpoint reviews and stale succeeded checkpoint stages during run-state sync when the backing artifact file no longer exists
 
 ### `app/run_state.py`
 
@@ -80,6 +82,7 @@ Current role:
 - Bridges the synchronous workflow service into API-friendly task behavior
 - New fresh-run launches now return a background task immediately instead of synchronously finishing upstream first
 - Persists task-local live progress fields (`progress_message`, `progress_step`, `progress_stage`) so the console can render an active execution workspace before a full run detail is available
+- `continue_mainline` launches now pass the same progress callback into `WorkflowService.run_mainline(...)`, so resumed upstream execution can surface live progress in the console
 
 ### `app/api.py`
 
@@ -90,6 +93,7 @@ Current role:
 - Serves local run artifacts through a bounded `/media/{run_id}/...` route
 - Converts synchronous create-run validation failures into readable API responses for the console
 - Exposes `/api/runs/{run_id}/videos` for shot-video and final-video preview data
+- Converts invalid review approvals into API validation errors instead of surfacing them as generic server failures
 
 ### `app/ui.py`
 
