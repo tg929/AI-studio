@@ -1,8 +1,23 @@
 # Progress
 
-Last updated: 2026-03-18
+Last updated: 2026-03-19
 
 ## Completed
+
+- Fixed operator-console stage-card timing semantics so the UI no longer renders raw `updated_at` values as if they were real completion times:
+  - the backend now derives stage display-time fields from `events.jsonl` plus current stage status
+  - stage cards now distinguish `完成于` vs `复用于` vs `开始于` vs `失败于` vs `阻塞于`
+  - `awaiting_approval` checkpoints now display the artifact completion time instead of the approval-wait timestamp
+  - legacy runs such as `run14` now infer stage timing from historical stage events instead of showing compatibility-sync timestamps
+- Updated the operator console to render visible timestamps in local browser time instead of raw UTC `...Z` strings for:
+  - stage cards
+  - run-list update times
+  - run-detail header update time
+  - review update times
+- Added regression coverage for:
+  - preferring stage success events over polluted state timestamps when a stage was reused
+  - showing artifact completion time for `awaiting_approval` stages
+  - preventing the stage-card UI from regressing back to raw `stage.updated_at`
 
 - Fixed two operator-console workflow-state regressions exposed by `run22`:
   - `continue_mainline` tasks now forward live progress callbacks into `run_mainline`, so resumed upstream generation no longer appears frozen at `输入接收`

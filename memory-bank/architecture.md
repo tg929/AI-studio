@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-17
+Last updated: 2026-03-19
 
 ## Current Files
 
@@ -46,6 +46,9 @@ Current role:
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI
 - Builds a downstream video-summary payload so the console can preview shot videos and the final stitched output
 - Builds stage-aware preview headlines and truncated content summaries from existing workflow artifacts so stage cards can show content instead of raw file paths
+- Derives stage-card display timing from persisted stage events instead of exposing raw stage `updated_at` values directly
+- Distinguishes stage-card timing semantics such as `完成于`, `复用于`, `开始于`, `失败于`, and `阻塞于`
+- Uses historical `stage_succeeded` events to recover cleaner timing for legacy runs whose persisted state timestamps were later overwritten by compatibility sync or artifact reuse
 - Uses user-facing Chinese copy for stage preview headlines so operator cards no longer mix filesystem jargon with English prompt-group labels
 - Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
 - Collapses router `risks` / `missing_critical_info` into one lightweight `operator_hint` for the slimmer operator-facing route card
@@ -107,6 +110,8 @@ Current role:
 - Displays shot-video cards and the final stitched video directly inside the run detail page
 - Defaults new runs to `input_mode=auto` so source classification is delegated to upstream routing instead of the operator manually selecting an input type
 - Renders stage cards with preview headlines and truncated content summaries instead of filesystem paths
+- Renders stage-card bottom timestamps from backend timing fields instead of raw `stage.updated_at`
+- Formats operator-visible timestamps in browser-local time for run lists, run-detail header metadata, review metadata, and stage cards
 - Switches the right panel into an active-task workspace while a submitted task is queued or running, so operators see current action, process timeline, and live artifact summary instead of stale historical detail
 - Renders a slimmer `系统判断` card above stages so upstream source classification, chosen path, reasoning, and one lightweight hint are visible without opening raw JSON
 - Uses Chinese, creator-facing labels for the main modules, rerun-stage selector, and review-area section titles

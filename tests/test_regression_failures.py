@@ -502,6 +502,122 @@ class WorkflowStagePreviewTests(unittest.TestCase):
         self.assertEqual(payload["operator_hint"], "未指定漫剧美术风格")
 
 
+class WorkflowStageTimingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.output_root = Path(self.temp_dir.name)
+        self.run_dir = self.output_root / "run_timing"
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+
+        config_stub = SimpleNamespace(model_name="stub-model", base_url="http://example.invalid")
+        self._patches = [
+            mock.patch("app.workflow_service.load_text_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_image_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_video_model_config", return_value=config_stub),
+        ]
+        for patcher in self._patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        self.service = WorkflowService(output_root=self.output_root, env_file=None)
+        (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "01_input" / "script_clean.txt").write_text("normalized script", encoding="utf-8")
+
+        for stage in ("upstream", "asset_images", "storyboard"):
+            update_review(self.run_dir, stage=stage, status="pending", reviewer="seed")
+
+    def write_events(self, *entries: dict[str, object]) -> None:
+        path = self.run_dir / "_meta" / "events.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [json.dumps(entry, ensure_ascii=False) for entry in entries]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def overwrite_stage_times(self, stage: str, *, finished_at: str, updated_at: str) -> None:
+        path = self.run_dir / "_meta" / "run_state.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["updated_at"] = updated_at
+        payload["stages"][stage]["finished_at"] = finished_at
+        payload["stages"][stage]["updated_at"] = updated_at
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def test_inspect_run_prefers_resume_event_for_reused_upstream_time(self) -> None:
+        script_clean_path = self.run_dir / "01_input" / "script_clean.txt"
+        update_stage_state(
+            self.run_dir,
+            stage="upstream",
+            status="succeeded",
+            message="Recovered legacy `upstream` approval from existing artifact.",
+            artifact_path=str(script_clean_path.resolve()),
+            source_script_name="demo",
+        )
+        self.overwrite_stage_times(
+            "upstream",
+            finished_at="2026-03-20T00:00:00Z",
+            updated_at="2026-03-20T00:00:00Z",
+        )
+        self.write_events(
+            {
+                "timestamp": "2026-03-19T01:31:43Z",
+                "event_type": "stage_succeeded",
+                "stage": "upstream",
+                "message": "Resumed existing run directory without re-running upstream routing.",
+                "data": {},
+            }
+        )
+
+        payload = self.service.inspect_run(self.run_dir)["run_state"]
+        upstream_stage = payload["stages"]["upstream"]
+
+        self.assertEqual(upstream_stage["display_time_label"], "复用于")
+        self.assertEqual(upstream_stage["display_time_at"], "2026-03-19T01:31:43Z")
+
+    def test_inspect_run_uses_completion_time_for_awaiting_approval_stage(self) -> None:
+        manifest_path = self.run_dir / "05_asset_images" / "asset_images_manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps({"source_run": self.run_dir.name, "characters": [], "scenes": [], "props": []}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        update_stage_state(
+            self.run_dir,
+            stage="asset_images",
+            status="awaiting_approval",
+            message="Awaiting operator approval for `asset_images`.",
+            artifact_path=str(manifest_path.resolve()),
+            source_script_name="demo",
+            run_status="awaiting_approval",
+            awaiting_approval_stage="asset_images",
+        )
+        self.overwrite_stage_times(
+            "asset_images",
+            finished_at="2026-03-20T00:00:00Z",
+            updated_at="2026-03-20T00:00:00Z",
+        )
+        self.write_events(
+            {
+                "timestamp": "2026-03-19T01:00:00Z",
+                "event_type": "stage_succeeded",
+                "stage": "asset_images",
+                "message": "Generated asset_images_manifest.json.",
+                "data": {},
+            },
+            {
+                "timestamp": "2026-03-19T01:01:00Z",
+                "event_type": "approval_required",
+                "stage": "asset_images",
+                "message": "Awaiting operator approval for `asset_images` before downstream execution.",
+                "data": {},
+            },
+        )
+
+        payload = self.service.inspect_run(self.run_dir)["run_state"]
+        asset_stage = payload["stages"]["asset_images"]
+
+        self.assertEqual(asset_stage["display_time_label"], "完成于")
+        self.assertEqual(asset_stage["display_time_at"], "2026-03-19T01:00:00Z")
+
+
 class WorkflowTaskRunnerTests(unittest.TestCase):
     def test_launch_run_returns_background_task_before_mainline_finishes(self) -> None:
         fake_run_root = Path(tempfile.mkdtemp(prefix="task-runner-smoke-"))
@@ -606,6 +722,9 @@ class OperatorConsoleHtmlTests(unittest.TestCase):
         self.assertNotIn("确认与审核", html)
         self.assertNotIn("运行目录：", html)
         self.assertNotIn("处理动作", html)
+        self.assertIn("function formatLocalTimestamp(value)", html)
+        self.assertIn("renderStageTime(stage)", html)
+        self.assertNotIn("${stage.updated_at || ''}", html)
         self.assertIn("window.scrollTo({top: Math.min(scrollY, maxScroll), behavior: 'auto'})", html)
 
 

@@ -954,6 +954,28 @@ def build_console_html() -> str:
       return `<span class="tag ${status || ''}">${escapeHtml(humanizeStatus(status || ''))}</span>`;
     }
 
+    function formatLocalTimestamp(value) {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) return text;
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hour = String(date.getHours()).padStart(2, '0');
+      const minute = String(date.getMinutes()).padStart(2, '0');
+      const second = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+    }
+
+    function renderStageTime(stage) {
+      const label = String(stage?.display_time_label || '').trim();
+      const timestamp = String(stage?.display_time_at || '').trim();
+      if (!label) return '';
+      if (!timestamp) return label;
+      return `${label} ${formatLocalTimestamp(timestamp)}`;
+    }
+
     function escapeHtml(value) {
       return String(value || '')
         .replace(/&/g, '&amp;')
@@ -1273,7 +1295,7 @@ def build_console_html() -> str:
                 <input class="compact-input" id="reviewer_${stage}" value="${escapeHtml(review.reviewer || '')}" placeholder="填写处理人姓名" />
               </label>
               <label>更新时间
-                <input class="compact-input" value="${escapeHtml(review.updated_at || '')}" readonly />
+                <input class="compact-input" value="${escapeHtml(formatLocalTimestamp(review.updated_at || ''))}" readonly />
               </label>
             </div>
             <label>备注
@@ -1787,7 +1809,7 @@ def build_console_html() -> str:
           <div class="muted">${run.source_script_name || '未命名任务'}</div>
           <div class="meta-line" style="margin-top:10px">
             <span class="muted">${humanizeStageName(run.current_stage || '') || '待处理'}</span>
-            <span class="muted">${run.updated_at || ''}</span>
+            <span class="muted">${escapeHtml(formatLocalTimestamp(run.updated_at || ''))}</span>
           </div>
         </div>
       `).join('');
@@ -1924,7 +1946,7 @@ def build_console_html() -> str:
             </div>
             ${stage.preview_headline ? `<div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_headline)}</div>` : ''}
             <div class="muted" style="margin-top:8px">${escapeHtml(stage.preview_text || stage.message || '当前还没有阶段摘要。')}</div>
-            <div class="muted" style="margin-top:10px">${stage.updated_at || ''}</div>
+            <div class="muted" style="margin-top:10px">${escapeHtml(renderStageTime(stage))}</div>
           </div>
         `;
       }).join('');
@@ -1950,7 +1972,7 @@ def build_console_html() -> str:
               ${statusTag(runState.status)}
               <span class="pill">当前阶段：${escapeHtml(humanizeStageName(runState.current_stage || '') || '待处理')}</span>
               ${runState.awaiting_approval_stage ? `<span class="pill">待确认：${escapeHtml(humanizeReviewStage(runState.awaiting_approval_stage))}</span>` : ''}
-              <span class="pill">更新时间：${runState.updated_at || ''}</span>
+              <span class="pill">更新时间：${escapeHtml(formatLocalTimestamp(runState.updated_at || ''))}</span>
               ${reviewOverview}
             </div>
           </div>

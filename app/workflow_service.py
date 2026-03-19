@@ -1288,6 +1288,7 @@ class WorkflowService:
             raise FileNotFoundError(f"Run directory not found: {resolved_run_dir}")
         state = self.sync_run_state(resolved_run_dir)
         run_state_payload = state.model_dump(mode="json")
+        events_by_stage = self._group_events_by_stage(self.read_events(resolved_run_dir, limit=0))
         for stage_name, stage_payload in run_state_payload.get("stages", {}).items():
             if not isinstance(stage_payload, dict):
                 continue
@@ -1296,6 +1297,12 @@ class WorkflowService:
                     resolved_run_dir,
                     stage_name,
                     fallback_message=str(stage_payload.get("message", "")).strip(),
+                )
+            )
+            stage_payload.update(
+                self.build_stage_timing_display(
+                    stage_payload,
+                    stage_events=events_by_stage.get(stage_name, []),
                 )
             )
         return {
@@ -1350,6 +1357,137 @@ class WorkflowService:
         if limit <= 0:
             return events
         return events[-limit:]
+
+    @staticmethod
+    def _group_events_by_stage(events: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            stage = str(event.get("stage", "")).strip()
+            if not stage:
+                continue
+            grouped.setdefault(stage, []).append(event)
+        return grouped
+
+    @staticmethod
+    def _last_stage_event(stage_events: list[dict[str, Any]], *event_types: str) -> dict[str, Any] | None:
+        for event in reversed(stage_events):
+            if str(event.get("event_type", "")).strip() in event_types:
+                return event
+        return None
+
+    @staticmethod
+    def _stage_display_timestamp(
+        stage_payload: dict[str, Any],
+        *,
+        event: dict[str, Any] | None,
+        fallback_keys: tuple[str, ...],
+    ) -> str:
+        if event is not None:
+            timestamp = str(event.get("timestamp", "")).strip()
+            if timestamp:
+                return timestamp
+        for key in fallback_keys:
+            timestamp = str(stage_payload.get(key, "")).strip()
+            if timestamp:
+                return timestamp
+        return ""
+
+    @staticmethod
+    def _stage_success_is_reused(stage_payload: dict[str, Any], success_event: dict[str, Any] | None) -> bool:
+        metadata = stage_payload.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("reused_existing_artifact"):
+            return True
+
+        message = ""
+        if success_event is not None:
+            message = str(success_event.get("message", "")).strip()
+        if not message:
+            message = str(stage_payload.get("message", "")).strip()
+
+        return message.startswith(
+            (
+                "Reused existing ",
+                "Resumed existing run directory without re-running upstream routing.",
+                "Detected existing artifact.",
+                "Recovered legacy ",
+            )
+        )
+
+    def build_stage_timing_display(
+        self,
+        stage_payload: dict[str, Any],
+        *,
+        stage_events: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        status = str(stage_payload.get("status", "")).strip()
+        success_event = self._last_stage_event(stage_events, "stage_succeeded")
+
+        if status == "pending":
+            return {"display_time_label": "未开始", "display_time_at": "", "display_is_reused": False}
+        if status == "running":
+            return {
+                "display_time_label": "开始于",
+                "display_time_at": self._stage_display_timestamp(
+                    stage_payload,
+                    event=self._last_stage_event(stage_events, "stage_started"),
+                    fallback_keys=("started_at", "updated_at"),
+                ),
+                "display_is_reused": False,
+            }
+        if status == "awaiting_approval":
+            return {
+                "display_time_label": "完成于",
+                "display_time_at": self._stage_display_timestamp(
+                    stage_payload,
+                    event=success_event,
+                    fallback_keys=("finished_at", "updated_at"),
+                ),
+                "display_is_reused": False,
+            }
+        if status == "failed":
+            return {
+                "display_time_label": "失败于",
+                "display_time_at": self._stage_display_timestamp(
+                    stage_payload,
+                    event=self._last_stage_event(stage_events, "stage_failed"),
+                    fallback_keys=("finished_at", "updated_at"),
+                ),
+                "display_is_reused": False,
+            }
+        if status == "blocked":
+            return {
+                "display_time_label": "阻塞于",
+                "display_time_at": self._stage_display_timestamp(
+                    stage_payload,
+                    event=self._last_stage_event(stage_events, "stage_blocked"),
+                    fallback_keys=("finished_at", "updated_at"),
+                ),
+                "display_is_reused": False,
+            }
+        if status == "succeeded":
+            is_reused = self._stage_success_is_reused(stage_payload, success_event)
+            return {
+                "display_time_label": "复用于" if is_reused else "完成于",
+                "display_time_at": self._stage_display_timestamp(
+                    stage_payload,
+                    event=success_event,
+                    fallback_keys=("finished_at", "updated_at"),
+                ),
+                "display_is_reused": is_reused,
+            }
+        if status == "skipped":
+            return {
+                "display_time_label": "已跳过",
+                "display_time_at": self._stage_display_timestamp(
+                    stage_payload,
+                    event=self._last_stage_event(stage_events, "stage_skipped"),
+                    fallback_keys=("finished_at", "updated_at"),
+                ),
+                "display_is_reused": False,
+            }
+        return {"display_time_label": "", "display_time_at": "", "display_is_reused": False}
 
     @staticmethod
     def _dedupe_preserve_order(values: Iterable[str]) -> list[str]:
