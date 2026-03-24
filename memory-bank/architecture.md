@@ -733,6 +733,20 @@ The implemented nodes now write:
   - `01_input/script_clean.txt`
 - Stage preview summaries should only claim completed outputs when the corresponding artifact file already exists; otherwise they fall back to runtime messages or stay empty.
 
+## Static Product Prototype
+
+- A separate front-end-only prototype now exists at `aistudio-dashboard-prototype/`.
+- This prototype is intentionally decoupled from the real operator console and backend APIs.
+- It uses one fixed project case based on `run23` and exposes the workflow as three product-facing agents:
+  - `意图识别 Agent`
+  - `资产提取 Agent`
+  - `分镜生成 Agent`
+- Its landing page is now input-first:
+  - first screen focuses on entering one idea and choosing where to enter the three-agent flow
+  - technical disclosure copy and dense execution metadata are intentionally hidden from the opening screen
+- Detailed technical sub-steps are not surfaced as standalone product agents; they are grouped inside the right-side expanded drawer for each of the three main agents.
+- The prototype timeline is modeled as a finite set of hard-coded snapshots rather than live execution state.
+
 ## Model Compatibility Note
 
 The current text model rejected `response_format={"type":"json_object"}`.

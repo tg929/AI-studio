@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Studio · 漫剧制作台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="backdrop-glow" aria-hidden="true"></div>
+  <div class="backdrop-grid" aria-hidden="true"></div>
+
+  <div class="window-shell">
+    <header class="window-topbar">
+      <div class="traffic-lights" aria-hidden="true">
+        <span class="traffic red"></span>
+        <span class="traffic amber"></span>
+        <span class="traffic green"></span>
+      </div>
+      <div class="topbar-brand">
+        <span class="brand-mark">A</span>
+        <div>
+          <div class="brand-name">AI Studio</div>
+          <div class="brand-meta">漫剧制作台</div>
+        </div>
+      </div>
+    </header>
+
+    <main id="app" class="app-root"></main>
+  </div>
+
+  <div id="mediaModal" class="media-modal" aria-hidden="true">
+    <div class="media-modal-panel">
+      <button id="closeMediaModal" class="media-close" type="button" aria-label="关闭预览">×</button>
+      <div id="mediaModalMeta" class="media-meta"></div>
+      <div id="mediaModalBody" class="media-body"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

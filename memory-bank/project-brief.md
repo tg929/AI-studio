@@ -80,6 +80,8 @@ Current baseline:
 - Final video stitching trims the leading first-frame display window from each shot before concatenation
 - Final video stitching can also force a short leading black-screen cover on each processed shot before concatenation
 - JSON as the default inter-stage contract
+- `aistudio-dashboard-prototype/` is a separate static product-prototype track; it intentionally does not share live runtime behavior with the real operator console
+- The prototype track currently uses an input-first landing page rather than an artifact-heavy dashboard on first open
 
 ## V1 Success Criteria
 

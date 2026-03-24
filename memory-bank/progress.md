@@ -584,3 +584,14 @@ The project now has:
   - the upstream review card now foregrounds `generated_script.txt` and `script_clean.txt`, so the stop point reads as "完整剧本已生成，等待确认" instead of looking like an early interruption
   - future-stage summary cards no longer claim outputs such as `风格基线已建立` or `正式分镜 0 条` before their artifacts actually exist
   - regression coverage now checks both the new review UI strings and the missing-artifact stage-preview behavior
+- Added a new static product prototype under `aistudio-dashboard-prototype/`:
+  - single-page client-style prototype with a home view and a `run23` three-agent workflow view
+  - the product-facing agent names are fixed to `意图识别 Agent` / `资产提取 Agent` / `分镜生成 Agent`
+  - the workflow page uses five fixed `run23` snapshots: `剧本待确认`, `资产待确认`, `分镜待确认`, `参考板发布阻塞`, `最终完成`
+  - all page data is hard-coded in front-end JS; no live backend/API calls are used
+  - media assets copied into the prototype come from real `run23` outputs: asset images, reference boards, `shot_001.mp4`, and `final_video.mp4`
+- Reworked the static prototype landing experience after product-direction review:
+  - the home view is now input-first instead of a dense artifact dashboard
+  - the primary headline is now `一句创意推进最终成片`
+  - the landing page now emphasizes creator actions (`输入创意` / `填入示例` / `开始体验`) plus a three-step agent journey
+  - visible prototype-disclosure copy and engineering-heavy labels such as `主案例` / `执行路径` / `人工闸门` were removed from the first screen
