@@ -8,10 +8,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from fastapi.testclient import TestClient
+
+from app.api import create_api_app
 from app.review_state import update_review
 from app.run_state import update_stage_state
 from app.task_runner import WorkflowTaskRunner
-from app.workflow_service import WorkflowService
+from app.workflow_service import WorkflowBlockedError, WorkflowService
 from app.ui import build_console_html
 from pipeline.asset_images import build_jobs_payload, build_sensitive_retry_render_prompt
 from pipeline.intent_to_script import normalize_intake_router_payload, read_json_string as read_stage_json_string
@@ -650,6 +653,63 @@ class WorkflowStageTimingTests(unittest.TestCase):
         self.assertEqual(asset_stage["display_time_at"], "2026-03-19T01:00:00Z")
 
 
+class WorkflowPublisherCapabilityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.output_root = Path(self.temp_dir.name)
+
+        config_stub = SimpleNamespace(model_name="stub-model", base_url="http://example.invalid")
+        self._patches = [
+            mock.patch("app.workflow_service.load_text_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_image_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_video_model_config", return_value=config_stub),
+        ]
+        for patcher in self._patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        self.service = WorkflowService(output_root=self.output_root, env_file=None)
+
+    def test_describe_board_publisher_reports_missing_tos_for_auto(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=True):
+            payload = self.service.describe_board_publisher("auto")
+
+        self.assertEqual(payload["status"], "unconfigured")
+        self.assertFalse(payload["can_auto_publish"])
+        self.assertIn("BOARD_TOS_BUCKET", payload["missing_env"])
+        self.assertIn("auto", payload["reason"])
+
+    def test_publish_boards_auto_does_not_fallback_to_jsdelivr_in_auto_mode(self) -> None:
+        with (
+            mock.patch.dict("os.environ", {}, clear=True),
+            mock.patch.object(self.service, "load_jsdelivr_env", side_effect=AssertionError("jsdelivr should not be used")),
+        ):
+            with self.assertRaisesRegex(WorkflowBlockedError, "BOARD_TOS_\\*"):
+                self.service.publish_boards_auto(Path("/tmp/nonexistent.json"), "auto")
+
+    def test_runtime_publisher_api_exposes_auto_publish_capability(self) -> None:
+        service = mock.Mock()
+        service.describe_board_publisher.return_value = {
+            "status": "ready",
+            "publish_strategy": "auto",
+            "selected_mode": "tos",
+            "can_auto_publish": True,
+            "summary": "自动发布已就绪，参考板会直接上传到 TOS。",
+            "reason": "",
+            "recommended_action": "",
+            "missing_env": [],
+            "configuration": {"bucket": "demo-bucket"},
+        }
+        client = TestClient(create_api_app(service=service, task_runner=mock.Mock()))
+
+        response = client.get("/api/runtime/publisher")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["selected_mode"], "tos")
+        service.describe_board_publisher.assert_called_once_with("auto")
+
+
 class WorkflowTaskRunnerTests(unittest.TestCase):
     def test_launch_run_returns_background_task_before_mainline_finishes(self) -> None:
         fake_run_root = Path(tempfile.mkdtemp(prefix="task-runner-smoke-"))
@@ -915,6 +975,9 @@ class OperatorConsoleHtmlTests(unittest.TestCase):
         self.assertNotIn("运行目录：", html)
         self.assertNotIn("处理动作", html)
         self.assertIn("detail_action_status", html)
+        self.assertIn("publisher_status", html)
+        self.assertIn("自动发布能力", html)
+        self.assertIn("/api/runtime/publisher", html)
         self.assertIn("确认提交失败：", html)
         self.assertIn("继续执行失败：", html)
         self.assertIn("function formatLocalTimestamp(value)", html)

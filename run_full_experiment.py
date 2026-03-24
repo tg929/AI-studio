@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         "--publish-strategy",
         choices=("auto", "tos", "jsdelivr"),
         default="auto",
-        help="How to publish shot reference boards. `auto` tries TOS first, then GitHub + jsDelivr.",
+        help="How to publish shot reference boards. `auto` requires TOS for fully automatic publishing; `jsdelivr` is a manual fallback.",
     )
     parser.add_argument(
         "--target-repo-root",

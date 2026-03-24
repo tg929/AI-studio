@@ -75,6 +75,7 @@ Current baseline:
 - Shot duration fixed at 10 seconds
 - Asset images must include labels
 - Video model gets one stitched board image plus one shot prompt
+- Default automatic board publishing now requires configured `BOARD_TOS_*`; GitHub + jsDelivr is explicit manual fallback only
 - Asset extraction should only run after an explicit readiness check on the current script candidate
 - Storyboard shot props may come from covered segments, listed-character signature props, or covered/primary-scene default props
 - Final video stitching trims the leading first-frame display window from each shot before concatenation

@@ -103,6 +103,10 @@ def create_api_app(
     def health() -> dict[str, Any]:
         return {"status": "ok"}
 
+    @app.get("/api/runtime/publisher")
+    def get_runtime_publisher() -> dict[str, Any]:
+        return workflow_service.describe_board_publisher("auto")
+
     @app.get("/api/runs")
     def list_runs(limit: int = 50) -> dict[str, Any]:
         return {"runs": workflow_service.list_runs(limit=limit)}

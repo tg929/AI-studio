@@ -851,6 +851,7 @@ def build_console_html() -> str:
               <button onclick="createRun()">开始执行</button>
               <button class="secondary" onclick="loadRuns()">刷新列表</button>
             </div>
+            <div id="publisher_status" class="status">正在检查自动发布能力...</div>
             <div id="create_status" class="status">等待操作。</div>
           </div>
         </div>
@@ -908,12 +909,78 @@ def build_console_html() -> str:
     let assetImageQuery = '';
     let storyboardSelectedShotId = '';
     let shotVideoFilter = 'all';
+    let publisherStatusCache = null;
 
     function setDetailActionStatus(message, isError = false) {
       const root = document.getElementById('detail_action_status');
       if (!root) return;
       root.textContent = message || '';
-      root.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+      root.style.color = isError ? 'var(--bad)' : 'var(--muted)';
+    }
+
+    function publisherTone(status) {
+      if (status === 'ready') return 'var(--ok)';
+      if (status === 'manual_fallback') return 'var(--warn)';
+      return 'var(--bad)';
+    }
+
+    function publisherShortLabel(payload) {
+      const status = String(payload?.status || '').trim();
+      if (status === 'ready') return 'TOS 已就绪';
+      if (status === 'manual_fallback') return '手工 jsDelivr';
+      return '未配置';
+    }
+
+    function renderPublisherCapabilityPanel(payload) {
+      if (!payload) return '';
+      const summary = String(payload.summary || '').trim();
+      const reason = String(payload.reason || '').trim();
+      const recommendedAction = String(payload.recommended_action || '').trim();
+      const missingEnv = Array.isArray(payload.missing_env) ? payload.missing_env : [];
+      const configuration = payload.configuration && typeof payload.configuration === 'object' ? payload.configuration : {};
+      const mode = String(payload.selected_mode || '').trim();
+      const rows = [];
+      if (summary) rows.push(`<div class="summary-box"><strong>当前能力</strong><div class="muted">${escapeHtml(summary)}</div></div>`);
+      if (reason) rows.push(`<div class="summary-box"><strong>说明</strong><div class="muted">${escapeHtml(reason)}</div></div>`);
+      if (recommendedAction) rows.push(`<div class="summary-box"><strong>建议动作</strong><div class="muted">${escapeHtml(recommendedAction)}</div></div>`);
+      if (missingEnv.length) rows.push(`<div class="summary-box"><strong>缺少环境变量</strong><div class="muted">${escapeHtml(missingEnv.join('、'))}</div></div>`);
+      if (mode === 'tos' && configuration.bucket) {
+        rows.push(`<div class="summary-box"><strong>目标存储</strong><div class="muted">${escapeHtml(`${configuration.bucket} @ ${configuration.region || configuration.endpoint || ''}`)}</div></div>`);
+      }
+      if (mode === 'jsdelivr' && configuration.repo_slug) {
+        rows.push(`<div class="summary-box"><strong>手工 fallback</strong><div class="muted">${escapeHtml(`${configuration.repo_slug}@${configuration.ref || 'default'}`)}</div></div>`);
+      }
+      if (!rows.length) return '';
+      return `
+        <section class="panel" style="padding:16px">
+          <h2>自动发布能力</h2>
+          <div class="summary-grid">${rows.join('')}</div>
+        </section>
+      `;
+    }
+
+    function paintPublisherStatus() {
+      const root = document.getElementById('publisher_status');
+      if (!root) return;
+      if (!publisherStatusCache) {
+        root.textContent = '正在检查自动发布能力...';
+        root.style.color = 'var(--muted)';
+        return;
+      }
+      const payload = publisherStatusCache;
+      const summary = String(payload.summary || '').trim() || '自动发布能力状态未知。';
+      const reason = String(payload.reason || '').trim();
+      root.textContent = reason ? `${summary} ${reason}` : summary;
+      root.style.color = publisherTone(payload.status);
+    }
+
+    async function loadPublisherStatus() {
+      const payload = await safeApi('/api/runtime/publisher');
+      if (payload) {
+        publisherStatusCache = payload;
+      }
+      paintPublisherStatus();
+      return publisherStatusCache;
     }
 
     async function api(path, options = {}) {
@@ -1828,6 +1895,7 @@ def build_console_html() -> str:
     }
 
     async function loadRuns() {
+      await loadPublisherStatus();
       const payload = await api('/api/runs?limit=50');
       const runs = payload.runs || [];
       const root = document.getElementById('runs');
@@ -1968,13 +2036,14 @@ def build_console_html() -> str:
     }
 
     async function loadRunDetail(runId, options = {}) {
-      const [runPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview] = await Promise.all([
+      const [runPayload, videoPayload, reviewsPayload, upstreamReview, assetReview, storyboardReview, publisherPayload] = await Promise.all([
         api(`/api/runs/${runId}`),
         safeApi(`/api/runs/${runId}/videos`),
         safeApi(`/api/runs/${runId}/reviews`),
         safeApi(`/api/runs/${runId}/reviews/upstream`),
         safeApi(`/api/runs/${runId}/reviews/asset_images`),
         safeApi(`/api/runs/${runId}/reviews/storyboard`),
+        safeApi('/api/runtime/publisher'),
       ]);
 
       const runState = runPayload.run_state || {};
@@ -2005,6 +2074,10 @@ def build_console_html() -> str:
       assetReviewCache = assetReview || null;
       storyboardReviewCache = storyboardReview || null;
       videoSummaryCache = videoPayload || null;
+      if (publisherPayload) {
+        publisherStatusCache = publisherPayload;
+        paintPublisherStatus();
+      }
       const storyboardShots = storyboardReviewCache?.payload?.shots || [];
       if (!storyboardShots.some(shot => shot.shot_id === storyboardSelectedShotId)) {
         storyboardSelectedShotId = storyboardShots[0]?.shot_id || '';
@@ -2019,6 +2092,7 @@ def build_console_html() -> str:
               ${statusTag(runState.status)}
               <span class="pill">当前阶段：${escapeHtml(humanizeStageName(runState.current_stage || '') || '待处理')}</span>
               ${runState.awaiting_approval_stage ? `<span class="pill">待确认：${escapeHtml(humanizeReviewStage(runState.awaiting_approval_stage))}</span>` : ''}
+              ${publisherStatusCache ? `<span class="pill">自动发布：${escapeHtml(publisherShortLabel(publisherStatusCache))}</span>` : ''}
               <span class="pill">更新时间：${escapeHtml(formatLocalTimestamp(runState.updated_at || ''))}</span>
               ${reviewOverview}
             </div>
@@ -2035,6 +2109,8 @@ def build_console_html() -> str:
         </div>
 
         ${renderRouteDecisionPanel(routeDecision)}
+
+        ${renderPublisherCapabilityPanel(publisherStatusCache)}
 
         <section class="panel" style="padding:16px">
           <h2>当前流程阶段</h2>
@@ -2096,7 +2172,7 @@ def build_console_html() -> str:
       }
     });
 
-    Promise.all([loadRuns(), loadRightPanel()]).catch(console.error);
+    Promise.all([loadPublisherStatus(), loadRuns(), loadRightPanel()]).catch(console.error);
     setInterval(pollCurrentRun, 6000);
   </script>
 </body>
