@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-19
+Last updated: 2026-03-24
 
 ## Current Files
 
@@ -52,6 +52,7 @@ Current role:
 - Uses user-facing Chinese copy for stage preview headlines so operator cards no longer mix filesystem jargon with English prompt-group labels
 - Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
 - Collapses router `risks` / `missing_critical_info` into one lightweight `operator_hint` for the slimmer operator-facing route card
+- Emits operator-facing progress payloads for downstream `run_mainline` stages as execution moves from asset extraction through final video, so resumed runs keep the console workspace aligned with the actual stage
 - Keeps the existing pipeline modules as the stage implementation boundary
 - Rejects checkpoint review approvals when the required checkpoint artifact file is missing
 - Auto-resets stale approved checkpoint reviews and stale succeeded checkpoint stages during run-state sync when the backing artifact file no longer exists
@@ -113,6 +114,7 @@ Current role:
 - Renders stage-card bottom timestamps from backend timing fields instead of raw `stage.updated_at`
 - Formats operator-visible timestamps in browser-local time for run lists, run-detail header metadata, review metadata, and stage cards
 - Switches the right panel into an active-task workspace while a submitted task is queued or running, so operators see current action, process timeline, and live artifact summary instead of stale historical detail
+- Resolves the active-task process step and fallback action against both task-local progress and the current run stage, preferring the later downstream stage when the task still carries generic resume text
 - Renders a slimmer `系统判断` card above stages so upstream source classification, chosen path, reasoning, and one lightweight hint are visible without opening raw JSON
 - Uses Chinese, creator-facing labels for the main modules, rerun-stage selector, and review-area section titles
 - No longer renders the old bottom `Tasks` block inside the operator-facing run detail

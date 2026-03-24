@@ -1,8 +1,15 @@
 # Progress
 
-Last updated: 2026-03-19
+Last updated: 2026-03-24
 
 ## Completed
+
+- Fixed a resumed-workspace progress regression exposed by `run23` after approving `upstream`:
+  - downstream `run_mainline` stages now emit operator-facing progress updates instead of stopping at the old `正在恢复已有运行目录。` placeholder
+  - the operator console active-task workspace now prefers the latest run-stage step and message over stale task-local resume text, so a resumed run no longer appears to jump back to `输入接收`
+- Added regression coverage for:
+  - downstream stage progress emission during `run_mainline`
+  - active-task timeline rendering against stale resume-state task payloads
 
 - Fixed operator-console stage-card timing semantics so the UI no longer renders raw `updated_at` values as if they were real completion times:
   - the backend now derives stage display-time fields from `events.jsonl` plus current stage status

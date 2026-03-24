@@ -1127,16 +1127,35 @@ def build_console_html() -> str:
     }
 
     function resolveTaskProcessStep(task, runPayload) {
-      if (processSteps.includes(task?.progress_step)) {
-        return task.progress_step;
+      const taskStep = processSteps.includes(task?.progress_step) ? task.progress_step : '';
+      const runStep = stageToProcessStep(runPayload?.run_state?.current_stage || task?.progress_stage || '');
+      if (!taskStep) {
+        return runStep;
       }
-      return stageToProcessStep(runPayload?.run_state?.current_stage || task?.progress_stage || '');
+      const taskIndex = processSteps.indexOf(taskStep);
+      const runIndex = processSteps.indexOf(runStep);
+      return runIndex > taskIndex ? runStep : taskStep;
     }
 
     function fallbackCurrentAction(task, runPayload) {
       const runState = runPayload?.run_state || {};
-      if (task?.progress_message) {
-        return task.progress_message;
+      const taskMessage = String(task?.progress_message || '').trim();
+      const taskStage = String(task?.progress_stage || '').trim();
+      const runStage = String(runState.current_stage || '').trim();
+      const genericResumeMessages = new Set([
+        '任务已提交，正在等待后台执行。',
+        '任务已提交，正在创建工作空间。',
+        '正在恢复已有运行目录。',
+      ]);
+      const taskMessageLooksStale = (
+        taskMessage
+        && genericResumeMessages.has(taskMessage)
+        && taskStage === 'upstream'
+        && runStage
+        && runStage !== 'upstream'
+      );
+      if (taskMessage && !taskMessageLooksStale) {
+        return taskMessage;
       }
       if (runState.awaiting_approval_stage) {
         return `当前产物已生成，请先确认${humanizeReviewStage(runState.awaiting_approval_stage)}后继续。`;
@@ -1247,7 +1266,7 @@ def build_console_html() -> str:
               <span class="pill">任务编号：${escapeHtml(task?.task_id || '')}</span>
               <span class="pill">任务目录：${escapeHtml(latestRunId)}</span>
               <span class="pill">状态：${escapeHtml(humanizeTaskStatus(task?.status || 'running'))}</span>
-              ${task?.progress_step ? `<span class="pill">流程：${escapeHtml(task.progress_step)}</span>` : ''}
+              <span class="pill">流程：${escapeHtml(resolveTaskProcessStep(task, runPayload))}</span>
             </div>
           </section>
           ${renderProcessTimeline(task, runPayload)}

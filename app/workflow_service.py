@@ -236,6 +236,43 @@ def _humanize_concat_mode(concat_mode: str) -> str:
     return labels.get(concat_mode, concat_mode)
 
 
+def _process_step_for_stage(stage_name: str) -> str:
+    if stage_name == "upstream":
+        return "剧本准备"
+    if stage_name in {"asset_extraction", "style_bible", "asset_prompts"}:
+        return "资产建立"
+    if stage_name == "asset_images":
+        return "参考资产"
+    if stage_name in {
+        "storyboard_seed",
+        "storyboard",
+        "shot_reference_boards",
+        "board_publish",
+        "video_jobs",
+        "shot_videos",
+        "final_video",
+    }:
+        return "正式分镜"
+    return "剧本准备"
+
+
+def _progress_message_for_stage(stage_name: str) -> str:
+    labels = {
+        "asset_extraction": "正在抽取角色、场景和道具。",
+        "style_bible": "正在建立统一风格基线。",
+        "asset_prompts": "正在整理参考资产生成说明。",
+        "asset_images": "正在生成参考资产图。",
+        "storyboard_seed": "正在生成预规划镜头草稿。",
+        "storyboard": "正在生成生产级分镜。",
+        "shot_reference_boards": "正在拼接每个镜头的参考板。",
+        "board_publish": "正在发布参考板地址。",
+        "video_jobs": "正在组装镜头视频任务。",
+        "shot_videos": "正在生成分镜视频。",
+        "final_video": "正在拼接最终成片。",
+    }
+    return labels.get(stage_name, "系统正在处理当前任务。")
+
+
 class WorkflowService:
     def __init__(
         self,
@@ -2343,7 +2380,20 @@ class WorkflowService:
             resolved_run_dir
         )
 
+        def emit_stage_progress(stage_name: str, message: str | None = None) -> None:
+            if progress_callback is None:
+                return
+            progress_callback(
+                {
+                    "message": message or _progress_message_for_stage(stage_name),
+                    "step": _process_step_for_stage(stage_name),
+                    "stage": stage_name,
+                    "run_dir": str(resolved_run_dir),
+                }
+            )
+
         if parallel_planning:
+            emit_stage_progress("asset_extraction", "正在并行执行资产抽取与预规划镜头。")
             parallel_result = self.run_parallel_planning(run_dir=resolved_run_dir, source_script_name=effective_source_name)
             if parallel_result.get("status") != "ok":
                 return parallel_result
@@ -2362,11 +2412,13 @@ class WorkflowService:
             remaining_stages = CORE_STAGE_ORDER[1:]
 
         if include_storyboard_seed and not parallel_planning:
+            emit_stage_progress("storyboard_seed")
             seed_result = self.run_stage("storyboard_seed", run_dir=resolved_run_dir, source_script_name=effective_source_name)
             if seed_result.get("status") != "ok":
                 return seed_result
 
         for stage in remaining_stages:
+            emit_stage_progress(stage)
             result = self.run_stage(
                 stage,  # type: ignore[arg-type]
                 run_dir=resolved_run_dir,

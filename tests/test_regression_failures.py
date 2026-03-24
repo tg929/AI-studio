@@ -702,6 +702,80 @@ class WorkflowTaskRunnerTests(unittest.TestCase):
         self.assertEqual(latest["progress_message"], "正在恢复已有运行目录。")
 
 
+class WorkflowMainlineProgressTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.output_root = Path(self.temp_dir.name)
+        self.run_dir = self.output_root / "run_progress"
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+
+        config_stub = SimpleNamespace(model_name="stub-model", base_url="http://example.invalid")
+        self._patches = [
+            mock.patch("app.workflow_service.load_text_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_image_model_config", return_value=config_stub),
+            mock.patch("app.workflow_service.load_video_model_config", return_value=config_stub),
+        ]
+        for patcher in self._patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        self.service = WorkflowService(output_root=self.output_root, env_file=None)
+
+    def test_run_mainline_emits_downstream_stage_progress(self) -> None:
+        events: list[dict[str, object]] = []
+        approved_reviews = SimpleNamespace(
+            reviews={
+                "upstream": SimpleNamespace(status="approved"),
+                "asset_images": SimpleNamespace(status="approved"),
+                "storyboard": SimpleNamespace(status="approved"),
+            }
+        )
+
+        with (
+            mock.patch.object(
+                self.service,
+                "start_or_resume",
+                return_value={
+                    "status": "ok",
+                    "run_dir": str(self.run_dir),
+                    "stage": "upstream",
+                    "source_script_name": "demo-script",
+                },
+            ),
+            mock.patch.object(
+                self.service,
+                "run_stage",
+                side_effect=lambda stage, **_: {"status": "ok", "run_dir": str(self.run_dir), "stage": stage},
+            ),
+            mock.patch.object(self.service, "inspect_run", return_value={"run_state": {}}),
+            mock.patch("app.workflow_service.ensure_reviews", return_value=approved_reviews),
+        ):
+            result = self.service.run_mainline(
+                run_dir=str(self.run_dir),
+                source_script_name="demo-script",
+                progress_callback=events.append,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(
+            any(
+                event.get("stage") == "asset_extraction"
+                and event.get("step") == "资产建立"
+                and event.get("message") == "正在抽取角色、场景和道具。"
+                for event in events
+            )
+        )
+        self.assertTrue(
+            any(
+                event.get("stage") == "final_video"
+                and event.get("step") == "正式分镜"
+                and event.get("message") == "正在拼接最终成片。"
+                for event in events
+            )
+        )
+
+
 class OperatorConsoleHtmlTests(unittest.TestCase):
     def test_console_html_uses_active_task_workspace_and_light_hint_copy(self) -> None:
         html = build_console_html()
