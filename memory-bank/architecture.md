@@ -40,8 +40,7 @@ Current role:
 
 - Shared orchestration layer for CLI, VeADK, and the upcoming custom operator UI
 - Owns start-or-resume behavior for new input or existing `runN`
-- Owns per-stage execution, mainline execution, artifact snapshotting, automatic board-publisher capability inspection, and board-publish strategy selection
-- Treats `auto` board publishing as TOS-only; GitHub + jsDelivr remains an explicit manual fallback path
+- Owns per-stage execution, mainline execution, artifact snapshotting, and board-publish strategy selection
 - Auto-bootstraps legacy checkpoint reviews to `approved` when an older run already has the checkpoint artifact but no real review history, so compatibility resumes do not get stuck on newly introduced gates
 - Persists stage outcomes through the run-state helpers
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI

@@ -79,17 +79,8 @@ WorkflowStage = Literal[
     "shot_videos",
     "final_video",
 ]
-PublishStrategy = Literal["auto", "tos", "jsdelivr"]
 
 ProgressCallback = Callable[[dict[str, Any]], None]
-
-BOARD_TOS_ENV_KEYS: tuple[str, ...] = (
-    "BOARD_TOS_BUCKET",
-    "BOARD_TOS_ENDPOINT",
-    "BOARD_TOS_REGION",
-    "BOARD_TOS_ACCESS_KEY",
-    "BOARD_TOS_SECRET_KEY",
-)
 
 REVIEW_CHECKPOINT_STAGE: dict[ReviewStage, WorkflowStage] = {
     "upstream": "upstream",
@@ -637,14 +628,6 @@ class WorkflowService:
         return PurePosixPath(*parts).as_posix()
 
     @staticmethod
-    def missing_board_tos_env_keys() -> list[str]:
-        missing: list[str] = []
-        for key in BOARD_TOS_ENV_KEYS:
-            if not os.getenv(key, "").strip():
-                missing.append(key)
-        return missing
-
-    @staticmethod
     def load_board_tos_env() -> dict[str, str] | None:
         required = {
             "bucket": os.getenv("BOARD_TOS_BUCKET", "").strip(),
@@ -658,65 +641,6 @@ class WorkflowService:
         required["key_prefix"] = os.getenv("BOARD_TOS_KEY_PREFIX", "ai-studio-boards").strip("/") or "ai-studio-boards"
         required["url_expiry_seconds"] = os.getenv("BOARD_TOS_URL_EXPIRES_SECONDS", "86400").strip() or "86400"
         return required
-
-    def describe_board_publisher(self, publish_strategy: PublishStrategy = "auto") -> dict[str, Any]:
-        missing_tos_keys = self.missing_board_tos_env_keys()
-        tos_env = self.load_board_tos_env()
-        if publish_strategy in {"auto", "tos"}:
-            if tos_env is None:
-                strategy_label = "`auto`" if publish_strategy == "auto" else "`tos`"
-                summary = "自动发布未配置，完整流程会在参考板发布阶段停止。"
-                reason = (
-                    f"{strategy_label} 发布策略要求配置 BOARD_TOS_* 环境变量后，才能把镜头参考板自动上传成公网首帧 URL。"
-                )
-                if publish_strategy == "auto":
-                    reason += " `auto` 模式不再回退到 GitHub + jsDelivr。"
-                return {
-                    "status": "unconfigured",
-                    "publish_strategy": publish_strategy,
-                    "selected_mode": "",
-                    "can_auto_publish": False,
-                    "summary": summary,
-                    "reason": reason,
-                    "recommended_action": "先配置 BOARD_TOS_*，如需应急手工方案，再显式使用 `jsdelivr`。",
-                    "missing_env": missing_tos_keys,
-                    "configuration": {},
-                }
-            return {
-                "status": "ready",
-                "publish_strategy": publish_strategy,
-                "selected_mode": "tos",
-                "can_auto_publish": True,
-                "summary": "自动发布已就绪，参考板会直接上传到 TOS。",
-                "reason": "",
-                "recommended_action": "",
-                "missing_env": [],
-                "configuration": {
-                    "bucket": tos_env["bucket"],
-                    "endpoint": tos_env["endpoint"],
-                    "region": tos_env["region"],
-                    "key_prefix": tos_env["key_prefix"],
-                    "url_expiry_seconds": int(tos_env["url_expiry_seconds"]),
-                },
-            }
-
-        jsdelivr_env = self.load_jsdelivr_env()
-        return {
-            "status": "manual_fallback",
-            "publish_strategy": publish_strategy,
-            "selected_mode": "jsdelivr",
-            "can_auto_publish": False,
-            "summary": "当前将使用 GitHub + jsDelivr 手工发布参考板。",
-            "reason": "该模式仍然需要手工 commit/push，等待公网 URL 可访问后才能继续生成视频。",
-            "recommended_action": "仅在临时应急时显式使用 `jsdelivr`，正常自动流程请优先配置 BOARD_TOS_*。",
-            "missing_env": [],
-            "configuration": {
-                "repo_slug": jsdelivr_env["repo_slug"],
-                "ref": jsdelivr_env["ref"],
-                "url_prefix": jsdelivr_env["url_prefix"],
-                "publish_root_dir": jsdelivr_env["publish_root_dir"],
-            },
-        }
 
     def load_jsdelivr_env(self) -> dict[str, str]:
         repo_slug = os.getenv("BOARD_JSDELIVR_REPO_SLUG", "").strip() or self.infer_repo_slug(self.target_repo_root)
@@ -896,23 +820,17 @@ class WorkflowService:
         )
         return result_path
 
-    def publish_boards_auto(self, manifest_path: Path, publish_strategy: PublishStrategy) -> tuple[str, Path]:
-        capability = self.describe_board_publisher(publish_strategy)
-        if publish_strategy in {"auto", "tos"}:
-            if capability["status"] != "ready":
-                reason = str(capability.get("reason", "")).strip() or "Automatic board publishing is not configured."
-                recommended_action = str(capability.get("recommended_action", "")).strip()
-                missing_env = capability.get("missing_env", [])
-                if missing_env:
-                    reason += f" Missing env: {', '.join(str(item) for item in missing_env)}."
-                if recommended_action:
-                    reason += f" {recommended_action}"
-                raise WorkflowBlockedError("board_publish", reason)
-            tos_env = self.load_board_tos_env()
-            if tos_env is None:
-                raise WorkflowBlockedError("board_publish", "BOARD_TOS_* resolved to an invalid runtime configuration.")
+    def publish_boards_auto(self, manifest_path: Path, publish_strategy: str) -> tuple[str, Path]:
+        tos_env = self.load_board_tos_env()
+        if publish_strategy in {"auto", "tos"} and tos_env is not None:
             result_path = self.publish_boards_with_tos(manifest_path, tos_env)
             return "tos", result_path
+
+        if publish_strategy == "tos":
+            raise WorkflowBlockedError(
+                "board_publish",
+                "Publish strategy was forced to `tos`, but BOARD_TOS_* variables are not configured.",
+            )
 
         jsdelivr_env = self.load_jsdelivr_env()
         public_base_url = f"https://cdn.jsdelivr.net/gh/{jsdelivr_env['repo_slug']}@{jsdelivr_env['ref']}"
@@ -2306,7 +2224,7 @@ class WorkflowService:
         run_dir: Path | str,
         source_script_name: str = "",
         force: bool = False,
-        publish_strategy: PublishStrategy = "auto",
+        publish_strategy: Literal["auto", "tos", "jsdelivr"] = "auto",
         selected_shots: set[str] | None = None,
         resolution: str = "720p",
         timeout_seconds: int = 1800,
@@ -2587,7 +2505,7 @@ class WorkflowService:
         run_dir: str = "",
         include_storyboard_seed: bool = False,
         parallel_planning: bool = False,
-        publish_strategy: PublishStrategy = "auto",
+        publish_strategy: Literal["auto", "tos", "jsdelivr"] = "auto",
         selected_shots: set[str] | None = None,
         resolution: str = "720p",
         timeout_seconds: int = 1800,

@@ -55,13 +55,6 @@ STAGE_ORDER = (
     "shot_videos",
     "final_video",
 )
-BOARD_TOS_ENV_KEYS = (
-    "BOARD_TOS_BUCKET",
-    "BOARD_TOS_ENDPOINT",
-    "BOARD_TOS_REGION",
-    "BOARD_TOS_ACCESS_KEY",
-    "BOARD_TOS_SECRET_KEY",
-)
 
 
 class WorkflowBlockedError(RuntimeError):
@@ -109,7 +102,7 @@ def parse_args() -> argparse.Namespace:
         "--publish-strategy",
         choices=("auto", "tos", "jsdelivr"),
         default="auto",
-        help="How to publish shot reference boards. `auto` requires TOS for fully automatic publishing; `jsdelivr` is a manual fallback.",
+        help="How to publish shot reference boards. `auto` tries TOS first, then GitHub + jsDelivr.",
     )
     parser.add_argument(
         "--target-repo-root",
@@ -243,14 +236,6 @@ def load_board_tos_env() -> dict[str, str] | None:
     required["key_prefix"] = os.getenv("BOARD_TOS_KEY_PREFIX", "ai-studio-boards").strip("/") or "ai-studio-boards"
     required["url_expiry_seconds"] = os.getenv("BOARD_TOS_URL_EXPIRES_SECONDS", "86400").strip() or "86400"
     return required
-
-
-def missing_board_tos_env_keys() -> list[str]:
-    missing: list[str] = []
-    for key in BOARD_TOS_ENV_KEYS:
-        if not os.getenv(key, "").strip():
-            missing.append(key)
-    return missing
 
 
 def load_jsdelivr_env(target_repo_root: Path) -> dict[str, str]:
@@ -440,19 +425,15 @@ def publish_boards_with_tos(manifest_path: Path, tos_env: dict[str, str]) -> Pat
 
 def publish_boards_auto(manifest_path: Path, publish_strategy: str, target_repo_root: Path) -> tuple[str, Path]:
     tos_env = load_board_tos_env()
-    if publish_strategy in {"auto", "tos"}:
-        if tos_env is None:
-            strategy_label = "`auto`" if publish_strategy == "auto" else "`tos`"
-            missing_env = ", ".join(missing_board_tos_env_keys())
-            reason = f"{strategy_label} 发布策略要求先配置 BOARD_TOS_* 环境变量。"
-            if publish_strategy == "auto":
-                reason += " `auto` 模式不再回退到 GitHub + jsDelivr。"
-            if missing_env:
-                reason += f" Missing env: {missing_env}."
-            reason += " 如需应急手工方案，请显式使用 `jsdelivr`。"
-            raise WorkflowBlockedError("board_publish", reason)
+    if publish_strategy in {"auto", "tos"} and tos_env is not None:
         result_path = publish_boards_with_tos(manifest_path, tos_env)
         return "tos", result_path
+
+    if publish_strategy == "tos":
+        raise WorkflowBlockedError(
+            "board_publish",
+            "Publish strategy was forced to `tos`, but BOARD_TOS_* variables are not configured.",
+        )
 
     jsdelivr_env = load_jsdelivr_env(target_repo_root)
     public_base_url = f"https://cdn.jsdelivr.net/gh/{jsdelivr_env['repo_slug']}@{jsdelivr_env['ref']}"

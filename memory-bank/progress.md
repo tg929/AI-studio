@@ -396,14 +396,14 @@ The project now has:
   - asset extraction now detects that specific unsupported-parameter error and retries automatically without `response_format`
 - Fixed the VeADK web `board_publish` gating logic in `ai_studio_flow/workflow_tools.py`:
   - TOS remains the first publish strategy when `BOARD_TOS_*` envs are configured
-  - explicit jsDelivr fallback remains available for manual publishing, but it is no longer the automatic default path
+  - otherwise the workflow now falls back to the existing GitHub + jsDelivr publish path
   - the fallback copies board PNGs into `static/runs/...`, updates `shot_reference_manifest.json`, and checks whether the public CDN URL is already reachable
   - if jsDelivr still returns `404`, the workflow now blocks with the correct next action: commit and push the generated `static/runs/...` files
 - Added `run_workflow.py` as a unified local terminal entrypoint for the current workflow:
   - supports fresh input via `--input` or `--text`
   - supports resume via `--run-dir`
   - skips completed stages automatically
-  - uses the same publish behavior as the shared workflow service, with `auto` reserved for fully automatic TOS publishing
+  - mirrors the current publish behavior: TOS first, then GitHub + jsDelivr fallback
 - Fixed the VeADK web `run16` story-blueprint failure mode in `pipeline/intent_to_script.py`:
   - some model outputs returned only 2 `scene_plan.visual_anchors`, while the schema requires at least 3
   - blueprint normalization now backfills missing scene anchors from scene-specific beat anchors plus conservative local fallbacks before schema validation
@@ -575,8 +575,3 @@ The project now has:
   - later video prompts should be assembled programmatically from storyboard fields plus asset/style anchors
   - `video_jobs.json` is now assembled locally from `storyboard.json + shot_reference_manifest.json + asset_registry.json + style_bible.json`
   - `shot_reference_manifest.json` currently leaves `board_public_url` empty; a publishing/URL step is still required before video submission
-- Simplified board-publish runtime behavior for the operator console:
-  - `app/workflow_service.py` now exposes an explicit automatic publisher capability check for `auto`
-  - `auto` publishing now requires configured `BOARD_TOS_*` credentials and no longer silently falls back to GitHub + jsDelivr
-  - the operator UI now shows automatic publish readiness up front through `/api/runtime/publisher`
-  - explicit `jsdelivr` remains available only as a manual fallback path
