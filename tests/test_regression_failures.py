@@ -393,6 +393,77 @@ class WorkflowReviewGateTests(unittest.TestCase):
         self.assertEqual(run_state["current_stage"], "asset_images")
         self.assertEqual(run_state["stages"]["asset_images"]["status"], "awaiting_approval")
 
+    def test_plan_continue_run_retries_blocked_board_publish_instead_of_skipping_to_video_jobs(self) -> None:
+        script_clean_path = self.run_dir / "01_input" / "script_clean.txt"
+        asset_images_path = self.run_dir / "05_asset_images" / "asset_images_manifest.json"
+        storyboard_path = self.run_dir / "06_storyboard" / "storyboard.json"
+        board_publish_path = self.run_dir / "07_shot_reference_boards" / "board_publish_result.json"
+
+        self.write_json(
+            asset_images_path,
+            {
+                "source_run": self.run_dir.name,
+                "characters": [],
+                "scenes": [],
+                "props": [],
+            },
+        )
+        self.write_json(
+            storyboard_path,
+            {
+                "source_run": self.run_dir.name,
+                "shots": [],
+            },
+        )
+        self.write_json(
+            board_publish_path,
+            {
+                "source_run": self.run_dir.name,
+                "published_boards": [],
+            },
+        )
+        update_review(self.run_dir, stage="upstream", status="approved", reviewer="operator")
+        update_review(self.run_dir, stage="asset_images", status="approved", reviewer="operator")
+        update_review(self.run_dir, stage="storyboard", status="approved", reviewer="operator")
+        update_stage_state(
+            self.run_dir,
+            stage="upstream",
+            status="succeeded",
+            artifact_path=str(script_clean_path.resolve()),
+            source_script_name="demo",
+        )
+        update_stage_state(
+            self.run_dir,
+            stage="asset_images",
+            status="succeeded",
+            artifact_path=str(asset_images_path.resolve()),
+            source_script_name="demo",
+        )
+        update_stage_state(
+            self.run_dir,
+            stage="storyboard",
+            status="succeeded",
+            artifact_path=str(storyboard_path.resolve()),
+            source_script_name="demo",
+        )
+        update_stage_state(
+            self.run_dir,
+            stage="board_publish",
+            status="blocked",
+            message="Published local board files, but the public CDN URL is not reachable yet.",
+            artifact_path=str(board_publish_path.resolve()),
+            source_script_name="demo",
+            run_status="blocked",
+            current_stage="board_publish",
+            last_error="Published local board files, but the public CDN URL is not reachable yet.",
+        )
+
+        plan = self.service.plan_continue_run(self.run_dir, source_script_name="demo")
+
+        self.assertEqual(plan["status"], "ready")
+        self.assertEqual(plan["stage"], "board_publish")
+        self.assertIn("not reachable yet", plan["reason"])
+
     def test_resume_auto_approves_legacy_checkpoint_reviews_from_existing_artifacts(self) -> None:
         (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
         (self.run_dir / "01_input" / "script_clean.txt").write_text("legacy script", encoding="utf-8")

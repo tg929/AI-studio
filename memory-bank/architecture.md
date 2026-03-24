@@ -41,6 +41,7 @@ Current role:
 - Shared orchestration layer for CLI, VeADK, and the upcoming custom operator UI
 - Owns start-or-resume behavior for new input or existing `runN`
 - Owns per-stage execution, mainline execution, artifact snapshotting, and board-publish strategy selection
+- When resuming a run, prioritizes any persisted `blocked` or `failed` stage before inferring progress from artifact files alone
 - Auto-bootstraps legacy checkpoint reviews to `approved` when an older run already has the checkpoint artifact but no real review history, so compatibility resumes do not get stuck on newly introduced gates
 - Persists stage outcomes through the run-state helpers
 - Enriches operator review payloads with asset-image lookups and available shot-board previews for the UI

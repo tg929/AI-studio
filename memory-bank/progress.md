@@ -575,3 +575,7 @@ The project now has:
   - later video prompts should be assembled programmatically from storyboard fields plus asset/style anchors
   - `video_jobs.json` is now assembled locally from `storyboard.json + shot_reference_manifest.json + asset_registry.json + style_bible.json`
   - `shot_reference_manifest.json` currently leaves `board_public_url` empty; a publishing/URL step is still required before video submission
+- Fixed mainline resume after a blocked publish stage:
+  - `plan_continue_run(...)` now retries the first persisted `blocked` or `failed` stage before trusting artifact existence
+  - this prevents runs like `run23` from skipping `board_publish` just because `board_publish_result.json` already exists
+  - after a manual push, `continue_mainline` now resumes at `board_publish` instead of incorrectly advancing into `video_jobs` / `shot_videos`

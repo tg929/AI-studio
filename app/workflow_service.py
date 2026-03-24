@@ -1175,6 +1175,20 @@ class WorkflowService:
             }
 
         for stage in CORE_STAGE_ORDER[1:]:
+            stage_state = state.stages.get(stage)
+            if stage_state is None:
+                continue
+            if stage_state.status not in {"blocked", "failed"}:
+                continue
+            reason = stage_state.message.strip() or state.last_error.strip()
+            return {
+                "status": "ready",
+                "stage": stage,
+                "reason": reason,
+                "run_dir": str(resolved_run_dir),
+            }
+
+        for stage in CORE_STAGE_ORDER[1:]:
             artifact_path = self.canonical_stage_artifact_path(resolved_run_dir, stage)
             stage_state = state.stages.get(stage)
             if artifact_path.exists() or (stage_state is not None and stage_state.status == "succeeded"):
