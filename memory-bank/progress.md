@@ -579,3 +579,8 @@ The project now has:
   - `plan_continue_run(...)` now retries the first persisted `blocked` or `failed` stage before trusting artifact existence
   - this prevents runs like `run23` from skipping `board_publish` just because `board_publish_result.json` already exists
   - after a manual push, `continue_mainline` now resumes at `board_publish` instead of incorrectly advancing into `video_jobs` / `shot_videos`
+- Fixed operator-console review timing cues for upstream script generation:
+  - the console no longer renders untouched review checkpoints as `待处理`; unreached checkpoints now show `未到达`, and in-flight checkpoints show `生成中`
+  - the upstream review card now foregrounds `generated_script.txt` and `script_clean.txt`, so the stop point reads as "完整剧本已生成，等待确认" instead of looking like an early interruption
+  - future-stage summary cards no longer claim outputs such as `风格基线已建立` or `正式分镜 0 条` before their artifacts actually exist
+  - regression coverage now checks both the new review UI strings and the missing-artifact stage-preview behavior

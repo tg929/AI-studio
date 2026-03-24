@@ -403,120 +403,143 @@ class WorkflowService:
             reason_text = str(reasons[0]).strip() if reasons else ""
             preview_text = " ".join(part for part in [reason_text, script_excerpt] if part).strip()
         elif stage == "asset_extraction":
-            payload = self._read_json_if_exists(run_dir / "02_assets" / "asset_registry.json")
-            characters = payload.get("characters", []) if isinstance(payload.get("characters"), list) else []
-            scenes = payload.get("scenes", []) if isinstance(payload.get("scenes"), list) else []
-            props = payload.get("props", []) if isinstance(payload.get("props"), list) else []
-            preview_headline = f"角色 {len(characters)} / 场景 {len(scenes)} / 道具 {len(props)}"
-            sample_names = self._sample_names(characters) or self._sample_names(scenes) or self._sample_names(props)
-            if sample_names:
-                preview_text = f"已抽取核心资产：{sample_names}"
+            path = run_dir / "02_assets" / "asset_registry.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                characters = payload.get("characters", []) if isinstance(payload.get("characters"), list) else []
+                scenes = payload.get("scenes", []) if isinstance(payload.get("scenes"), list) else []
+                props = payload.get("props", []) if isinstance(payload.get("props"), list) else []
+                preview_headline = f"角色 {len(characters)} / 场景 {len(scenes)} / 道具 {len(props)}"
+                sample_names = self._sample_names(characters) or self._sample_names(scenes) or self._sample_names(props)
+                if sample_names:
+                    preview_text = f"已抽取核心资产：{sample_names}"
         elif stage == "style_bible":
-            payload = self._read_json_if_exists(run_dir / "03_style" / "style_bible.json")
-            preview_headline = "风格基线已建立"
-            preview_text = " ".join(
-                part
-                for part in [
-                    str(payload.get("story_tone", "")).strip(),
-                    str(payload.get("visual_style", "")).strip(),
-                    str(payload.get("consistency_anchors", "")).strip(),
-                ]
-                if part
-            )
-        elif stage == "asset_prompts":
-            payload = self._read_json_if_exists(run_dir / "04_asset_prompts" / "asset_prompts.json")
-            prompt_groups: list[tuple[str, list[dict[str, Any]]]] = []
-            for group_name in ("characters", "scenes", "props"):
-                items = payload.get(group_name, [])
-                if isinstance(items, list) and items:
-                    prompt_groups.append((group_name, [item for item in items if isinstance(item, dict)]))
-            if prompt_groups:
-                group_name, items = prompt_groups[0]
-                first_item = items[0] if items else {}
-                name = (
-                    str(first_item.get("name", "")).strip()
-                    or str(first_item.get("id", "")).strip()
-                    or _humanize_prompt_group(group_name)
+            path = run_dir / "03_style" / "style_bible.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                preview_headline = "风格基线已建立"
+                preview_text = " ".join(
+                    part
+                    for part in [
+                        str(payload.get("story_tone", "")).strip(),
+                        str(payload.get("visual_style", "")).strip(),
+                        str(payload.get("consistency_anchors", "")).strip(),
+                    ]
+                    if part
                 )
-                prompt_text = str(first_item.get("prompt", "")).strip()
-                preview_headline = f"{_humanize_prompt_group(group_name)}参考说明 {len(items)} 条"
-                preview_text = f"{name}：{prompt_text}".strip("： ")
+        elif stage == "asset_prompts":
+            path = run_dir / "04_asset_prompts" / "asset_prompts.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                prompt_groups: list[tuple[str, list[dict[str, Any]]]] = []
+                for group_name in ("characters", "scenes", "props"):
+                    items = payload.get(group_name, [])
+                    if isinstance(items, list) and items:
+                        prompt_groups.append((group_name, [item for item in items if isinstance(item, dict)]))
+                if prompt_groups:
+                    group_name, items = prompt_groups[0]
+                    first_item = items[0] if items else {}
+                    name = (
+                        str(first_item.get("name", "")).strip()
+                        or str(first_item.get("id", "")).strip()
+                        or _humanize_prompt_group(group_name)
+                    )
+                    prompt_text = str(first_item.get("prompt", "")).strip()
+                    preview_headline = f"{_humanize_prompt_group(group_name)}参考说明 {len(items)} 条"
+                    preview_text = f"{name}：{prompt_text}".strip("： ")
         elif stage == "asset_images":
-            payload = self._read_json_if_exists(run_dir / "05_asset_images" / "asset_images_manifest.json")
-            characters = payload.get("characters", []) if isinstance(payload.get("characters"), list) else []
-            scenes = payload.get("scenes", []) if isinstance(payload.get("scenes"), list) else []
-            props = payload.get("props", []) if isinstance(payload.get("props"), list) else []
-            preview_headline = f"人物 {len(characters)} / 场景 {len(scenes)} / 道具 {len(props)}"
-            sample_names = self._sample_names(characters) or self._sample_names(scenes) or self._sample_names(props)
-            if sample_names:
-                preview_text = f"已生成参考资产图：{sample_names}"
+            path = run_dir / "05_asset_images" / "asset_images_manifest.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                characters = payload.get("characters", []) if isinstance(payload.get("characters"), list) else []
+                scenes = payload.get("scenes", []) if isinstance(payload.get("scenes"), list) else []
+                props = payload.get("props", []) if isinstance(payload.get("props"), list) else []
+                preview_headline = f"人物 {len(characters)} / 场景 {len(scenes)} / 道具 {len(props)}"
+                sample_names = self._sample_names(characters) or self._sample_names(scenes) or self._sample_names(props)
+                if sample_names:
+                    preview_text = f"已生成参考资产图：{sample_names}"
         elif stage == "storyboard_seed":
-            payload = self._read_json_if_exists(run_dir / "00_source" / "storyboard_seed.json")
-            shots = payload.get("shots", []) if isinstance(payload.get("shots"), list) else []
-            preview_headline = f"预规划镜头 {len(shots)} 条"
-            highlights = []
-            for shot in shots[:2]:
-                if not isinstance(shot, dict):
-                    continue
-                shot_id = str(shot.get("id", "")).strip()
-                purpose = str(shot.get("shot_purpose", "")).strip()
-                if shot_id or purpose:
-                    highlights.append(" ".join(part for part in [shot_id, purpose] if part))
-            preview_text = " / ".join(highlights)
+            path = run_dir / "00_source" / "storyboard_seed.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                shots = payload.get("shots", []) if isinstance(payload.get("shots"), list) else []
+                preview_headline = f"预规划镜头 {len(shots)} 条"
+                highlights = []
+                for shot in shots[:2]:
+                    if not isinstance(shot, dict):
+                        continue
+                    shot_id = str(shot.get("id", "")).strip()
+                    purpose = str(shot.get("shot_purpose", "")).strip()
+                    if shot_id or purpose:
+                        highlights.append(" ".join(part for part in [shot_id, purpose] if part))
+                preview_text = " / ".join(highlights)
         elif stage == "storyboard":
-            payload = self._read_json_if_exists(run_dir / "06_storyboard" / "storyboard.json")
-            shots = payload.get("shots", []) if isinstance(payload.get("shots"), list) else []
-            preview_headline = f"正式分镜 {len(shots)} 条"
-            highlights = []
-            for shot in shots[:2]:
-                if not isinstance(shot, dict):
-                    continue
-                shot_id = str(shot.get("id", "")).strip()
-                purpose = str(shot.get("shot_purpose", "")).strip() or str(shot.get("prompt_core", "")).strip()
-                if shot_id or purpose:
-                    highlights.append(" ".join(part for part in [shot_id, purpose] if part))
-            preview_text = " / ".join(highlights)
+            path = run_dir / "06_storyboard" / "storyboard.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                shots = payload.get("shots", []) if isinstance(payload.get("shots"), list) else []
+                preview_headline = f"正式分镜 {len(shots)} 条"
+                highlights = []
+                for shot in shots[:2]:
+                    if not isinstance(shot, dict):
+                        continue
+                    shot_id = str(shot.get("id", "")).strip()
+                    purpose = str(shot.get("shot_purpose", "")).strip() or str(shot.get("prompt_core", "")).strip()
+                    if shot_id or purpose:
+                        highlights.append(" ".join(part for part in [shot_id, purpose] if part))
+                preview_text = " / ".join(highlights)
         elif stage == "shot_reference_boards":
-            payload = self._read_json_if_exists(run_dir / "07_shot_reference_boards" / "shot_reference_manifest.json")
-            boards = payload.get("boards", []) if isinstance(payload.get("boards"), list) else []
-            preview_headline = f"参考板 {len(boards)} 张"
-            shot_ids = [str(board.get("shot_id", "")).strip() for board in boards[:3] if isinstance(board, dict)]
-            preview_text = " / ".join(shot_id for shot_id in shot_ids if shot_id)
+            path = run_dir / "07_shot_reference_boards" / "shot_reference_manifest.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                boards = payload.get("boards", []) if isinstance(payload.get("boards"), list) else []
+                preview_headline = f"参考板 {len(boards)} 张"
+                shot_ids = [str(board.get("shot_id", "")).strip() for board in boards[:3] if isinstance(board, dict)]
+                preview_text = " / ".join(shot_id for shot_id in shot_ids if shot_id)
         elif stage == "board_publish":
-            payload = self._read_json_if_exists(self.board_publish_result_path(run_dir))
-            published_boards = payload.get("published_boards", []) if isinstance(payload.get("published_boards"), list) else []
-            preview_headline = f"已发布参考板 {len(published_boards)} 张"
-            if published_boards:
-                first_item = published_boards[0] if isinstance(published_boards[0], dict) else {}
-                preview_text = str(first_item.get("signed_url") or first_item.get("public_url") or "").strip()
+            path = self.board_publish_result_path(run_dir)
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                published_boards = payload.get("published_boards", []) if isinstance(payload.get("published_boards"), list) else []
+                preview_headline = f"已发布参考板 {len(published_boards)} 张"
+                if published_boards:
+                    first_item = published_boards[0] if isinstance(published_boards[0], dict) else {}
+                    preview_text = str(first_item.get("signed_url") or first_item.get("public_url") or "").strip()
         elif stage == "video_jobs":
-            payload = self._read_json_if_exists(run_dir / "08_video_jobs" / "video_jobs.json")
-            jobs = payload.get("jobs", []) if isinstance(payload.get("jobs"), list) else []
-            preview_headline = f"视频任务 {len(jobs)} 条"
-            if jobs:
-                first_job = jobs[0] if isinstance(jobs[0], dict) else {}
-                shot_id = str(first_job.get("shot_id", "")).strip()
-                prompt_text = str(first_job.get("prompt", "")).strip()
-                preview_text = f"{shot_id}: {prompt_text}".strip(": ")
+            path = run_dir / "08_video_jobs" / "video_jobs.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                jobs = payload.get("jobs", []) if isinstance(payload.get("jobs"), list) else []
+                preview_headline = f"视频任务 {len(jobs)} 条"
+                if jobs:
+                    first_job = jobs[0] if isinstance(jobs[0], dict) else {}
+                    shot_id = str(first_job.get("shot_id", "")).strip()
+                    prompt_text = str(first_job.get("prompt", "")).strip()
+                    preview_text = f"{shot_id}: {prompt_text}".strip(": ")
         elif stage == "shot_videos":
-            payload = self._read_json_if_exists(run_dir / "09_shot_videos" / "shot_videos_manifest.json")
-            jobs = payload.get("jobs", []) if isinstance(payload.get("jobs"), list) else []
-            succeeded = sum(1 for job in jobs if isinstance(job, dict) and str(job.get("status", "")).strip() == "succeeded")
-            preview_headline = f"分镜视频 {succeeded}/{len(jobs)}"
-            if jobs:
-                failed = [str(job.get("shot_id", "")).strip() for job in jobs if isinstance(job, dict) and str(job.get("status", "")).strip() != "succeeded"]
-                preview_text = "全部分镜视频已生成。" if not failed else f"未完成镜头：{' / '.join(failed[:3])}"
+            path = run_dir / "09_shot_videos" / "shot_videos_manifest.json"
+            if path.exists():
+                payload = self._read_json_if_exists(path)
+                jobs = payload.get("jobs", []) if isinstance(payload.get("jobs"), list) else []
+                succeeded = sum(1 for job in jobs if isinstance(job, dict) and str(job.get("status", "")).strip() == "succeeded")
+                preview_headline = f"分镜视频 {succeeded}/{len(jobs)}"
+                if jobs:
+                    failed = [str(job.get("shot_id", "")).strip() for job in jobs if isinstance(job, dict) and str(job.get("status", "")).strip() != "succeeded"]
+                    preview_text = "全部分镜视频已生成。" if not failed else f"未完成镜头：{' / '.join(failed[:3])}"
         elif stage == "final_video":
-            payload = self._read_json_if_exists(run_dir / "10_final" / "final_video_manifest.json")
-            shot_count = payload.get("shot_count", "")
-            concat_mode = str(payload.get("concat_mode", "")).strip()
-            preview_headline = "最终成片已生成" if (run_dir / "10_final" / "final_video.mp4").exists() else "最终成片待生成"
-            preview_parts = []
-            if shot_count:
-                preview_parts.append(f"镜头数：{shot_count}")
-            if concat_mode:
-                preview_parts.append(f"拼接方式：{_humanize_concat_mode(concat_mode)}")
-            preview_text = " · ".join(preview_parts)
+            manifest_path = run_dir / "10_final" / "final_video_manifest.json"
+            video_path = run_dir / "10_final" / "final_video.mp4"
+            if manifest_path.exists() or video_path.exists():
+                payload = self._read_json_if_exists(manifest_path)
+                shot_count = payload.get("shot_count", "")
+                concat_mode = str(payload.get("concat_mode", "")).strip()
+                preview_headline = "最终成片已生成" if video_path.exists() else "最终成片待生成"
+                preview_parts = []
+                if shot_count:
+                    preview_parts.append(f"镜头数：{shot_count}")
+                if concat_mode:
+                    preview_parts.append(f"拼接方式：{_humanize_concat_mode(concat_mode)}")
+                preview_text = " · ".join(preview_parts)
 
         if not preview_headline and fallback_message:
             preview_headline, _ = _truncate_preview_text(fallback_message, limit=72)

@@ -720,6 +720,19 @@ The implemented nodes now write:
 - `runs/runN/10_final/final_video.mp4`
 - `runs/runN/10_final/trimmed/...`
 
+## Operator Console Review States
+
+- Review checkpoints still persist as `pending` in `reviews.json` from run creation time, but the console should not interpret that as an actionable stop.
+- The UI now derives review display state from both `reviews.json` and `run_state.stages[...]`:
+  - unreached checkpoint: `未到达`
+  - checkpoint artifact still generating: `生成中`
+  - checkpoint artifact complete and waiting for operator: `等待确认`
+  - explicit operator decisions remain `已通过` / `已退回`
+- Upstream review presentation now surfaces both:
+  - `00_source/generated_script.txt`
+  - `01_input/script_clean.txt`
+- Stage preview summaries should only claim completed outputs when the corresponding artifact file already exists; otherwise they fall back to runtime messages or stay empty.
+
 ## Model Compatibility Note
 
 The current text model rejected `response_format={"type":"json_object"}`.

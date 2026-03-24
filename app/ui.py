@@ -250,6 +250,10 @@ def build_console_html() -> str:
     .tag.blocked { background: rgba(166, 108, 17, 0.14); color: var(--warn); }
     .tag.failed { background: rgba(167, 57, 50, 0.12); color: var(--bad); }
     .tag.partial { background: rgba(88, 97, 92, 0.12); color: var(--muted); }
+    .tag.approved { background: rgba(44, 122, 75, 0.12); color: var(--ok); }
+    .tag.rejected { background: rgba(167, 57, 50, 0.12); color: var(--bad); }
+    .tag.in_progress { background: rgba(29, 91, 99, 0.12); color: var(--accent-2); }
+    .tag.not_ready { background: rgba(88, 97, 92, 0.12); color: var(--muted); }
     .muted {
       color: var(--muted);
       font-size: 13px;
@@ -940,6 +944,8 @@ def build_console_html() -> str:
     function humanizeStatus(status) {
       const labels = {
         pending: '待处理',
+        not_ready: '未到达',
+        in_progress: '生成中',
         queued: '排队中',
         running: '执行中',
         succeeded: '已完成',
@@ -1072,6 +1078,68 @@ def build_console_html() -> str:
         storyboard: '分镜确认',
       };
       return labels[stage] || stage || '待确认';
+    }
+
+    const reviewCheckpointStage = {
+      upstream: 'upstream',
+      asset_images: 'asset_images',
+      storyboard: 'storyboard',
+    };
+
+    function resolveReviewDisplay(stage, runState, reviewPayload) {
+      const review = reviewPayload?.review || {status: 'pending'};
+      const reviewStatus = String(review.status || 'pending').trim() || 'pending';
+      const checkpointStage = reviewCheckpointStage[stage] || stage;
+      const checkpointPayload = (runState?.stages || {})[checkpointStage] || {};
+      const checkpointStatus = String(checkpointPayload.status || 'pending').trim() || 'pending';
+
+      if (reviewStatus === 'approved' || reviewStatus === 'rejected') {
+        return {
+          status: reviewStatus,
+          actionable: true,
+          hint: `当前${humanizeReviewStage(stage)}已记录为${humanizeStatus(reviewStatus)}。`,
+        };
+      }
+      if (runState?.awaiting_approval_stage === stage || checkpointStatus === 'awaiting_approval') {
+        return {
+          status: 'awaiting_approval',
+          actionable: true,
+          hint: `当前阶段产物已生成，请确认${humanizeReviewStage(stage)}后继续。`,
+        };
+      }
+      if (checkpointStatus === 'blocked') {
+        return {
+          status: 'blocked',
+          actionable: true,
+          hint: `当前${humanizeReviewStage(stage)}已阻塞，可以更新审核状态后继续。`,
+        };
+      }
+      if (checkpointStatus === 'failed') {
+        return {
+          status: 'failed',
+          actionable: false,
+          hint: `当前阶段执行失败，需先重跑${humanizeStageName(checkpointStage)}。`,
+        };
+      }
+      if (checkpointStatus === 'running') {
+        return {
+          status: 'in_progress',
+          actionable: false,
+          hint: `${humanizeReviewStage(stage)}尚未开放，系统正在生成当前阶段产物。`,
+        };
+      }
+      if (checkpointStatus === 'succeeded' && reviewStatus === 'pending') {
+        return {
+          status: 'awaiting_approval',
+          actionable: true,
+          hint: `当前阶段产物已生成，请确认${humanizeReviewStage(stage)}后继续。`,
+        };
+      }
+      return {
+        status: 'not_ready',
+        actionable: false,
+        hint: `当前还没到${humanizeReviewStage(stage)}。`,
+      };
     }
 
     function humanizeEventType(eventType) {
@@ -1303,8 +1371,9 @@ def build_console_html() -> str:
       }
     }
 
-    function renderReviewSection(stage, title, reviewPayload, bodyHtml) {
+    function renderReviewSection(stage, title, reviewPayload, bodyHtml, options = {}) {
       const review = reviewPayload?.review || {status: 'pending', reviewer: '', notes: ''};
+      const display = options.display || {status: review.status || 'pending', actionable: true, hint: ''};
       return `
         <section class="review-card">
           <div class="review-toolbar">
@@ -1312,27 +1381,32 @@ def build_console_html() -> str:
               <h3>${escapeHtml(title)}</h3>
               <div class="muted">审核人：${escapeHtml(review.reviewer || '未填写')}</div>
             </div>
-            ${statusTag(review.status)}
+            ${statusTag(display.status)}
           </div>
+          ${display.hint ? `<div class="muted" style="margin-bottom:12px">${escapeHtml(display.hint)}</div>` : ''}
           ${bodyHtml}
-          <div class="review-form">
-            <div class="row">
-              <label>审核人
-                <input class="compact-input" id="reviewer_${stage}" value="${escapeHtml(review.reviewer || '')}" placeholder="填写处理人姓名" />
+          ${display.actionable ? `
+            <div class="review-form">
+              <div class="row">
+                <label>审核人
+                  <input class="compact-input" id="reviewer_${stage}" value="${escapeHtml(review.reviewer || '')}" placeholder="填写处理人姓名" />
+                </label>
+                <label>更新时间
+                  <input class="compact-input" value="${escapeHtml(formatLocalTimestamp(review.updated_at || ''))}" readonly />
+                </label>
+              </div>
+              <label>备注
+                <textarea id="notes_${stage}" placeholder="记录通过原因、问题点或返工建议。">${escapeHtml(review.notes || '')}</textarea>
               </label>
-              <label>更新时间
-                <input class="compact-input" value="${escapeHtml(formatLocalTimestamp(review.updated_at || ''))}" readonly />
-              </label>
+              <div class="review-actions">
+                <button class="approve" onclick="submitReview('${stage}', 'approved')">确认通过</button>
+                <button class="reject" onclick="submitReview('${stage}', 'rejected')">退回调整</button>
+                <button class="pending" onclick="submitReview('${stage}', 'pending')">标记待处理</button>
+              </div>
             </div>
-            <label>备注
-              <textarea id="notes_${stage}" placeholder="记录通过原因、问题点或返工建议。">${escapeHtml(review.notes || '')}</textarea>
-            </label>
-            <div class="review-actions">
-              <button class="approve" onclick="submitReview('${stage}', 'approved')">确认通过</button>
-              <button class="reject" onclick="submitReview('${stage}', 'rejected')">退回调整</button>
-              <button class="pending" onclick="submitReview('${stage}', 'pending')">标记待处理</button>
-            </div>
-          </div>
+          ` : `
+            <div class="empty" style="margin-top:14px">${escapeHtml(display.hint || '当前还没到这个人工确认点。')}</div>
+          `}
         </section>
       `;
     }
@@ -1355,24 +1429,35 @@ def build_console_html() -> str:
       `;
     }
 
-    function renderUpstreamReview(reviewPayload) {
+    function renderUpstreamReview(reviewPayload, runState) {
       const payload = reviewPayload?.payload || {};
       const summary = payload.summary || {};
       const artifacts = payload.artifacts || {};
+      const display = resolveReviewDisplay('upstream', runState, reviewPayload);
       const summaryHtml = `
         <div class="summary-grid">
+          ${renderSummaryBox('当前状态', display.status === 'awaiting_approval' ? '完整剧本已生成，等待人工确认' : humanizeStatus(display.status))}
           ${renderSummaryBox('执行路径', humanizeChosenPath(summary.chosen_path))}
           ${renderSummaryBox('系统会做什么', humanizeOperationList(summary.recommended_operations))}
           ${renderSummaryBox('可继续进入资产阶段', summary.ready_for_extraction ? '是' : '否')}
           ${renderSummaryBox('阻塞问题', summary.blocking_issues || [])}
         </div>
       `;
+      const generatedScriptPreview = artifacts['generated_script.txt'] ? truncate(artifacts['generated_script.txt'], 900) : '暂无扩写后的完整剧本';
       const routerJson = artifacts['intake_router.json'] ? JSON.stringify(artifacts['intake_router.json'], null, 2) : '暂无路由判断结果';
       const readinessJson = artifacts['asset_readiness_report.json'] ? JSON.stringify(artifacts['asset_readiness_report.json'], null, 2) : '暂无可读性检查结果';
       const scriptPreview = artifacts['script_clean.txt'] ? truncate(artifacts['script_clean.txt'], 900) : '暂无标准剧本';
       const bodyHtml = `
         ${summaryHtml}
         <div class="stack" style="margin-top:14px">
+          <div>
+            <div class="muted" style="margin-bottom:6px">扩写后的完整剧本</div>
+            <div class="json-box">${escapeHtml(generatedScriptPreview)}</div>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:6px">标准化剧本（进入下游版本）</div>
+            <div class="json-box">${escapeHtml(scriptPreview)}</div>
+          </div>
           <div>
             <div class="muted" style="margin-bottom:6px">系统判断详情</div>
             <div class="json-box">${escapeHtml(routerJson)}</div>
@@ -1381,13 +1466,9 @@ def build_console_html() -> str:
             <div class="muted" style="margin-bottom:6px">可继续执行检查</div>
             <div class="json-box">${escapeHtml(readinessJson)}</div>
           </div>
-          <div>
-            <div class="muted" style="margin-bottom:6px">当前标准剧本</div>
-            <div class="json-box">${escapeHtml(scriptPreview)}</div>
-          </div>
         </div>
       `;
-      return renderReviewSection('upstream', '剧本准备确认', reviewPayload, bodyHtml);
+      return renderReviewSection('upstream', '剧本准备确认', reviewPayload, bodyHtml, {display});
     }
 
     function humanizeGroup(group) {
@@ -1457,7 +1538,8 @@ def build_console_html() -> str:
       return Array.from(document.querySelectorAll('video')).some(video => !video.paused && !video.ended);
     }
 
-    function renderAssetImagesReview(reviewPayload) {
+    function renderAssetImagesReview(reviewPayload, runState) {
+      const display = resolveReviewDisplay('asset_images', runState, reviewPayload);
       const summary = reviewPayload?.payload?.summary || {};
       const summaryHtml = `
         <div class="summary-grid">
@@ -1484,7 +1566,7 @@ def build_console_html() -> str:
           <div id="asset_images_review_dynamic"></div>
         </div>
       `;
-      return renderReviewSection('asset_images', '参考资产确认', reviewPayload, bodyHtml);
+      return renderReviewSection('asset_images', '参考资产确认', reviewPayload, bodyHtml, {display});
     }
 
     function renderReferenceAssetCard(asset) {
@@ -1571,7 +1653,8 @@ def build_console_html() -> str:
       paintAssetImagesReview();
     }
 
-    function renderStoryboardReview(reviewPayload) {
+    function renderStoryboardReview(reviewPayload, runState) {
+      const display = resolveReviewDisplay('storyboard', runState, reviewPayload);
       const summary = reviewPayload?.payload?.summary || {};
       const bodyHtml = `
         <div class="review-shell">
@@ -1583,7 +1666,7 @@ def build_console_html() -> str:
           <div id="storyboard_review_dynamic"></div>
         </div>
       `;
-      return renderReviewSection('storyboard', '分镜确认', reviewPayload, bodyHtml);
+      return renderReviewSection('storyboard', '分镜确认', reviewPayload, bodyHtml, {display});
     }
 
     function paintStoryboardReview() {
@@ -1638,7 +1721,7 @@ def build_console_html() -> str:
                 <h3>${escapeHtml(selectedShot.shot_id || '镜头')}</h3>
                 <div class="muted">${escapeHtml(selectedShot.summary || '')}</div>
               </div>
-              ${statusTag(storyboardReviewCache?.review?.status || 'pending')}
+              ${statusTag(resolveReviewDisplay('storyboard', {stages: {storyboard: {status: storyboardReviewCache?.payload?.shots?.length ? 'awaiting_approval' : 'pending'}}}, storyboardReviewCache).status)}
             </div>
             <div class="micro-grid">
               <div class="micro-card"><strong>镜头类型</strong><div>${escapeHtml(selectedShot.shot_type || '暂无')}</div></div>
@@ -1998,9 +2081,15 @@ def build_console_html() -> str:
         `;
       }).join('');
 
-      const reviewOverview = ['upstream', 'asset_images', 'storyboard'].map(stage => `
-        <span class="pill">${humanizeReviewStage(stage)}：${humanizeStatus(reviewSummary?.[stage]?.status || 'pending')}</span>
-      `).join('');
+      const reviewOverview = ['upstream', 'asset_images', 'storyboard'].map(stage => {
+        const reviewPayloadByStage = {
+          upstream: upstreamReview,
+          asset_images: assetReview,
+          storyboard: storyboardReview,
+        };
+        const display = resolveReviewDisplay(stage, runState, reviewPayloadByStage[stage]);
+        return `<span class="pill">${humanizeReviewStage(stage)}：${humanizeStatus(display.status)}</span>`;
+      }).join('');
 
       assetReviewCache = assetReview || null;
       storyboardReviewCache = storyboardReview || null;
@@ -2044,9 +2133,9 @@ def build_console_html() -> str:
         <section class="panel" style="padding:16px">
           <h2>人工确认</h2>
           <div class="review-grid">
-            ${renderUpstreamReview(upstreamReview)}
-            ${renderAssetImagesReview(assetReview)}
-            ${renderStoryboardReview(storyboardReview)}
+            ${renderUpstreamReview(upstreamReview, runState)}
+            ${renderAssetImagesReview(assetReview, runState)}
+            ${renderStoryboardReview(storyboardReview, runState)}
           </div>
         </section>
 
