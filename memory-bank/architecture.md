@@ -53,6 +53,7 @@ Current role:
 - Builds a route-decision summary from `source_context.json` and `intake_router.json` so the UI can expose upstream classification and routing rationale directly to operators
 - Collapses router `risks` / `missing_critical_info` into one lightweight `operator_hint` for the slimmer operator-facing route card
 - Emits operator-facing progress payloads for downstream `run_mainline` stages as execution moves from asset extraction through final video, so resumed runs keep the console workspace aligned with the actual stage
+- Plans resume execution from the first incomplete mainline stage, and now restores checkpoint-gate `awaiting_approval` / `blocked` state from persisted review status so reused artifacts cannot leave `run_state.json` out of sync with `reviews.json`
 - Keeps the existing pipeline modules as the stage implementation boundary
 - Rejects checkpoint review approvals when the required checkpoint artifact file is missing
 - Auto-resets stale approved checkpoint reviews and stale succeeded checkpoint stages during run-state sync when the backing artifact file no longer exists
@@ -87,6 +88,7 @@ Current role:
 - New fresh-run launches now return a background task immediately instead of synchronously finishing upstream first
 - Persists task-local live progress fields (`progress_message`, `progress_step`, `progress_stage`) so the console can render an active execution workspace before a full run detail is available
 - `continue_mainline` launches now pass the same progress callback into `WorkflowService.run_mainline(...)`, so resumed upstream execution can surface live progress in the console
+- `continue_mainline` launches now preflight review gates and initialize task progress from the planned downstream stage instead of defaulting every resume to `输入接收`
 
 ### `app/api.py`
 
@@ -115,6 +117,7 @@ Current role:
 - Formats operator-visible timestamps in browser-local time for run lists, run-detail header metadata, review metadata, and stage cards
 - Switches the right panel into an active-task workspace while a submitted task is queued or running, so operators see current action, process timeline, and live artifact summary instead of stale historical detail
 - Resolves the active-task process step and fallback action against both task-local progress and the current run stage, preferring the later downstream stage when the task still carries generic resume text
+- Shows inline action-status feedback for review submission, continue, and rerun requests so operators can see success, failure, and “click continue next” hints without opening browser devtools
 - Renders a slimmer `系统判断` card above stages so upstream source classification, chosen path, reasoning, and one lightweight hint are visible without opening raw JSON
 - Uses Chinese, creator-facing labels for the main modules, rerun-stage selector, and review-area section titles
 - No longer renders the old bottom `Tasks` block inside the operator-facing run detail

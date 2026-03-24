@@ -4,6 +4,18 @@ Last updated: 2026-03-24
 
 ## Completed
 
+- Fixed the `run23` checkpoint-resume bugs exposed after `asset_images` review:
+  - `continue_mainline` now plans the first incomplete downstream stage instead of always replaying from `asset_extraction`
+  - continue requests are now rejected early when a checkpoint review is still pending, rejected, or the run is already complete
+  - workflow-state sync now restores `awaiting_approval` / `blocked` run-state fields from checkpoint review status even when the checkpoint artifact is being reused
+  - operator review / continue / rerun actions now surface explicit inline success or failure feedback in the console instead of failing silently
+  - active continue-task bootstrap progress now starts from the planned downstream step instead of defaulting back to `输入接收`
+- Added regression coverage for:
+  - restoring `awaiting_approval` from a pending checkpoint review during run inspection
+  - rejecting `continue_mainline` while a review gate is still pending
+  - resuming `run_mainline` from the first incomplete stage instead of replaying earlier succeeded stages
+  - operator-console HTML rendering the new inline action-status feedback
+
 - Fixed a resumed-workspace progress regression exposed by `run23` after approving `upstream`:
   - downstream `run_mainline` stages now emit operator-facing progress updates instead of stopping at the old `正在恢复已有运行目录。` placeholder
   - the operator console active-task workspace now prefers the latest run-stage step and message over stale task-local resume text, so a resumed run no longer appears to jump back to `输入接收`

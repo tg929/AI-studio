@@ -39,8 +39,8 @@ class RegressionFailureTests(unittest.TestCase):
 
         router = IntakeRouter.model_validate(payload)
 
-        self.assertEqual(router.chosen_path, "rewrite_then_extract")
-        self.assertEqual(router.recommended_operations, ["rewrite_for_asset_clarity", "compress"])
+        self.assertEqual(router.chosen_path, "compress_then_extract")
+        self.assertEqual(router.recommended_operations, ["compress", "rewrite_for_asset_clarity"])
 
     def test_storyboard_validation_accepts_signature_props_for_present_characters(self) -> None:
         asset_registry = AssetRegistry.model_validate(
@@ -362,6 +362,37 @@ class WorkflowReviewGateTests(unittest.TestCase):
         self.assertTrue(review["metadata"]["auto_reset_missing_artifact"])
         self.assertEqual(run_state["stages"]["asset_images"]["status"], "pending")
 
+    def test_sync_run_state_restores_awaiting_approval_for_pending_checkpoint_review(self) -> None:
+        manifest_path = self.run_dir / "05_asset_images" / "asset_images_manifest.json"
+        self.write_json(
+            manifest_path,
+            {
+                "source_run": self.run_dir.name,
+                "characters": [],
+                "scenes": [],
+                "props": [],
+            },
+        )
+        update_stage_state(
+            self.run_dir,
+            stage="asset_images",
+            status="succeeded",
+            artifact_path=str(manifest_path.resolve()),
+        )
+        update_review(
+            self.run_dir,
+            stage="asset_images",
+            status="pending",
+            metadata={"source": "operator_console"},
+        )
+
+        run_state = self.service.inspect_run(self.run_dir)["run_state"]
+
+        self.assertEqual(run_state["status"], "awaiting_approval")
+        self.assertEqual(run_state["awaiting_approval_stage"], "asset_images")
+        self.assertEqual(run_state["current_stage"], "asset_images")
+        self.assertEqual(run_state["stages"]["asset_images"]["status"], "awaiting_approval")
+
     def test_resume_auto_approves_legacy_checkpoint_reviews_from_existing_artifacts(self) -> None:
         (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
         (self.run_dir / "01_input" / "script_clean.txt").write_text("legacy script", encoding="utf-8")
@@ -543,6 +574,7 @@ class WorkflowStageTimingTests(unittest.TestCase):
 
     def test_inspect_run_prefers_resume_event_for_reused_upstream_time(self) -> None:
         script_clean_path = self.run_dir / "01_input" / "script_clean.txt"
+        update_review(self.run_dir, stage="upstream", status="approved", reviewer="operator")
         update_stage_state(
             self.run_dir,
             stage="upstream",
@@ -626,6 +658,7 @@ class WorkflowTaskRunnerTests(unittest.TestCase):
 
         service = mock.Mock()
         service.load_source_script_name.return_value = "test-script"
+        service.plan_continue_run.return_value = {"status": "ready", "stage": "upstream"}
 
         def run_mainline(**kwargs):
             progress_callback = kwargs["progress_callback"]
@@ -672,6 +705,7 @@ class WorkflowTaskRunnerTests(unittest.TestCase):
 
         service = mock.Mock()
         service.load_source_script_name.return_value = "test-script"
+        service.plan_continue_run.return_value = {"status": "ready", "stage": "storyboard"}
 
         def run_mainline(**kwargs):
             progress_callback = kwargs["progress_callback"]
@@ -690,6 +724,9 @@ class WorkflowTaskRunnerTests(unittest.TestCase):
 
         task = runner.launch_continue_run(run_dir=str(fake_run_dir))
 
+        self.assertEqual(task["progress_step"], "正式分镜")
+        self.assertEqual(task["progress_stage"], "storyboard")
+
         deadline = time.time() + 2.0
         latest = runner.get_task(task["task_id"])
         while latest is not None and latest["status"] in {"queued", "running"} and time.time() < deadline:
@@ -700,6 +737,24 @@ class WorkflowTaskRunnerTests(unittest.TestCase):
         assert latest is not None
         self.assertEqual(latest["status"], "succeeded")
         self.assertEqual(latest["progress_message"], "正在恢复已有运行目录。")
+
+    def test_launch_continue_run_rejects_pending_review_gate(self) -> None:
+        fake_run_root = Path(tempfile.mkdtemp(prefix="task-runner-gated-"))
+        fake_run_dir = fake_run_root / "run101"
+        fake_run_dir.mkdir(parents=True, exist_ok=True)
+
+        service = mock.Mock()
+        service.load_source_script_name.return_value = "test-script"
+        service.plan_continue_run.return_value = {
+            "status": "awaiting_approval",
+            "stage": "asset_images",
+            "review_stage": "asset_images",
+            "reason": "Awaiting operator approval for `asset_images` before downstream execution.",
+        }
+        runner = WorkflowTaskRunner(service)
+
+        with self.assertRaisesRegex(RuntimeError, "still waiting"):
+            runner.launch_continue_run(run_dir=str(fake_run_dir))
 
 
 class WorkflowMainlineProgressTests(unittest.TestCase):
@@ -745,6 +800,11 @@ class WorkflowMainlineProgressTests(unittest.TestCase):
             ),
             mock.patch.object(
                 self.service,
+                "plan_continue_run",
+                return_value={"status": "ready", "stage": "asset_extraction", "run_dir": str(self.run_dir)},
+            ),
+            mock.patch.object(
+                self.service,
                 "run_stage",
                 side_effect=lambda stage, **_: {"status": "ok", "run_dir": str(self.run_dir), "stage": stage},
             ),
@@ -775,6 +835,64 @@ class WorkflowMainlineProgressTests(unittest.TestCase):
             )
         )
 
+    def test_run_mainline_resumes_from_first_incomplete_stage(self) -> None:
+        (self.run_dir / "01_input").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "01_input" / "script_clean.txt").write_text("script", encoding="utf-8")
+        (self.run_dir / "02_assets").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "02_assets" / "asset_registry.json").write_text("{}", encoding="utf-8")
+        (self.run_dir / "03_style").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "03_style" / "style_bible.json").write_text("{}", encoding="utf-8")
+        (self.run_dir / "04_asset_prompts").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "04_asset_prompts" / "asset_prompts.json").write_text("{}", encoding="utf-8")
+        (self.run_dir / "05_asset_images").mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "05_asset_images" / "asset_images_manifest.json").write_text("{}", encoding="utf-8")
+
+        called_stages: list[str] = []
+        approved_reviews = SimpleNamespace(
+            reviews={
+                "upstream": SimpleNamespace(status="approved"),
+                "asset_images": SimpleNamespace(status="approved"),
+                "storyboard": SimpleNamespace(status="approved"),
+            }
+        )
+
+        with (
+            mock.patch.object(
+                self.service,
+                "start_or_resume",
+                return_value={
+                    "status": "ok",
+                    "run_dir": str(self.run_dir),
+                    "stage": "upstream",
+                    "source_script_name": "demo-script",
+                },
+            ),
+            mock.patch.object(
+                self.service,
+                "plan_continue_run",
+                return_value={"status": "ready", "stage": "storyboard", "run_dir": str(self.run_dir)},
+            ),
+            mock.patch.object(
+                self.service,
+                "run_stage",
+                side_effect=lambda stage, **_: called_stages.append(stage) or {"status": "ok", "run_dir": str(self.run_dir), "stage": stage},
+            ),
+            mock.patch.object(self.service, "inspect_run", return_value={"run_state": {}}),
+            mock.patch("app.workflow_service.ensure_reviews", return_value=approved_reviews),
+        ):
+            result = self.service.run_mainline(
+                run_dir=str(self.run_dir),
+                source_script_name="demo-script",
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(called_stages)
+        self.assertEqual(called_stages[0], "storyboard")
+        self.assertNotIn("asset_extraction", called_stages)
+        self.assertNotIn("style_bible", called_stages)
+        self.assertNotIn("asset_prompts", called_stages)
+        self.assertNotIn("asset_images", called_stages)
+
 
 class OperatorConsoleHtmlTests(unittest.TestCase):
     def test_console_html_uses_active_task_workspace_and_light_hint_copy(self) -> None:
@@ -796,6 +914,9 @@ class OperatorConsoleHtmlTests(unittest.TestCase):
         self.assertNotIn("确认与审核", html)
         self.assertNotIn("运行目录：", html)
         self.assertNotIn("处理动作", html)
+        self.assertIn("detail_action_status", html)
+        self.assertIn("确认提交失败：", html)
+        self.assertIn("继续执行失败：", html)
         self.assertIn("function formatLocalTimestamp(value)", html)
         self.assertIn("renderStageTime(stage)", html)
         self.assertNotIn("${stage.updated_at || ''}", html)

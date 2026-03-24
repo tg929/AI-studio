@@ -9,7 +9,12 @@ from uuid import uuid4
 from pipeline.intent_to_script import AUTO_INPUT_MODE
 
 from .run_state import append_run_event, utc_now_iso
-from .workflow_service import WorkflowService, WorkflowStage
+from .workflow_service import (
+    WorkflowService,
+    WorkflowStage,
+    _process_step_for_stage,
+    _progress_message_for_stage,
+)
 
 
 TaskStatus = Literal["queued", "running", "succeeded", "failed", "blocked", "partial", "awaiting_approval"]
@@ -59,15 +64,22 @@ class WorkflowTaskRunner:
         self._threads: dict[str, threading.Thread] = {}
 
     def _build_task(self, *, action: str, run_dir: Path | None = None, stage: str = "") -> WorkflowTask:
+        initial_stage = stage or "upstream"
+        initial_step = "输入接收" if initial_stage == "upstream" else _process_step_for_stage(initial_stage)
+        initial_message = (
+            "任务已提交，正在等待后台执行。"
+            if initial_stage == "upstream"
+            else _progress_message_for_stage(initial_stage)
+        )
         return WorkflowTask(
             task_id=uuid4().hex,
             action=action,
             run_id=run_dir.name if run_dir is not None else "",
             run_dir=str(run_dir.resolve()) if run_dir is not None else "",
             stage=stage,
-            progress_message="任务已提交，正在等待后台执行。",
-            progress_step="输入接收",
-            progress_stage=stage or "upstream",
+            progress_message=initial_message,
+            progress_step=initial_step,
+            progress_stage=initial_stage,
         )
 
     def _has_active_task(self, run_id: str) -> bool:
@@ -152,7 +164,7 @@ class WorkflowTaskRunner:
                 task.started_at = utc_now_iso()
             self._set_task_progress(
                 task,
-                message="任务已提交，正在创建工作空间。",
+                message="任务已提交，正在创建工作空间。" if (task.progress_stage or "upstream") == "upstream" else task.progress_message,
                 step=task.progress_step or "输入接收",
                 stage=task.stage or "upstream",
             )
@@ -293,7 +305,19 @@ class WorkflowTaskRunner:
         if not resolved_run_dir.exists():
             raise FileNotFoundError(f"Run directory not found: {resolved_run_dir}")
         source_script_name = self.service.load_source_script_name(resolved_run_dir)
-        task = self._build_task(action="continue_mainline", run_dir=resolved_run_dir, stage="")
+        continue_plan = self.service.plan_continue_run(resolved_run_dir, source_script_name=source_script_name)
+        plan_status = str(continue_plan.get("status", "")).strip()
+        if plan_status == "awaiting_approval":
+            review_stage = str(continue_plan.get("review_stage", "")).strip()
+            raise RuntimeError(
+                f"Run `{resolved_run_dir.name}` is still waiting for `{review_stage or continue_plan.get('stage', 'review')}` approval."
+            )
+        if plan_status == "blocked":
+            raise RuntimeError(str(continue_plan.get("reason", "workflow is blocked")).strip())
+        if plan_status == "completed":
+            raise RuntimeError(f"Run `{resolved_run_dir.name}` has already completed.")
+        planned_stage = str(continue_plan.get("stage", "")).strip() or "upstream"
+        task = self._build_task(action="continue_mainline", run_dir=resolved_run_dir, stage=planned_stage)
 
         def run_job(progress_callback: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
             return self.service.run_mainline(

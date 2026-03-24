@@ -40,6 +40,8 @@ from .run_state import (
     CORE_STAGE_ORDER,
     OPTIONAL_STAGE_ORDER,
     RunState,
+    RunStatus,
+    StageStatus,
     append_run_event,
     ensure_run_state,
     load_run_state,
@@ -271,6 +273,12 @@ def _progress_message_for_stage(stage_name: str) -> str:
         "final_video": "正在拼接最终成片。",
     }
     return labels.get(stage_name, "系统正在处理当前任务。")
+
+
+def _review_reason(review_stage: ReviewStage, *, target_stage: WorkflowStage | None = None) -> str:
+    if target_stage is None:
+        return f"Awaiting operator approval for `{review_stage}` before downstream execution."
+    return f"Awaiting operator approval for `{review_stage}` before running `{target_stage}`."
 
 
 class WorkflowService:
@@ -1119,6 +1127,71 @@ class WorkflowService:
             extra={"review_stage": review_stage, "target_stage": target_stage},
         )
 
+    def plan_continue_run(self, run_dir: Path | str, *, source_script_name: str = "") -> dict[str, Any]:
+        resolved_run_dir = Path(run_dir).resolve()
+        if not resolved_run_dir.exists():
+            return {
+                "status": "blocked",
+                "stage": "upstream",
+                "reason": f"run_dir not found: {resolved_run_dir}",
+                "run_dir": str(resolved_run_dir),
+            }
+
+        effective_source_name = source_script_name or self.load_source_script_name(resolved_run_dir)
+        state = self.sync_run_state(resolved_run_dir, source_script_name=effective_source_name)
+        reviews = ensure_reviews(resolved_run_dir)
+
+        latest_gate: tuple[ReviewStage, WorkflowStage, str] | None = None
+        for review_stage in REVIEW_STAGE_ORDER:
+            checkpoint_stage = REVIEW_CHECKPOINT_STAGE[review_stage]
+            artifact_path = self.canonical_stage_artifact_path(resolved_run_dir, checkpoint_stage)
+            if not artifact_path.exists():
+                continue
+            review = reviews.reviews.get(review_stage)
+            review_status = review.status if review is not None else "pending"
+            if review_status == "approved":
+                continue
+            if review_status == "rejected":
+                detail = f" Notes: {review.notes.strip()}" if review is not None and review.notes.strip() else ""
+                return {
+                    "status": "blocked",
+                    "stage": checkpoint_stage,
+                    "review_stage": review_stage,
+                    "reason": (
+                        f"Review `{review_stage}` is rejected. Update artifacts or change the review before continuing.{detail}"
+                    ),
+                    "run_dir": str(resolved_run_dir),
+                }
+            latest_gate = (review_stage, checkpoint_stage, _review_reason(review_stage))
+
+        if latest_gate is not None:
+            review_stage, checkpoint_stage, reason = latest_gate
+            return {
+                "status": "awaiting_approval",
+                "stage": checkpoint_stage,
+                "review_stage": review_stage,
+                "reason": reason,
+                "run_dir": str(resolved_run_dir),
+            }
+
+        for stage in CORE_STAGE_ORDER[1:]:
+            artifact_path = self.canonical_stage_artifact_path(resolved_run_dir, stage)
+            stage_state = state.stages.get(stage)
+            if artifact_path.exists() or (stage_state is not None and stage_state.status == "succeeded"):
+                continue
+            return {
+                "status": "ready",
+                "stage": stage,
+                "run_dir": str(resolved_run_dir),
+            }
+
+        return {
+            "status": "completed",
+            "stage": "final_video",
+            "reason": "Run already completed through final_video.",
+            "run_dir": str(resolved_run_dir),
+        }
+
     def _enforce_prerequisite_reviews(
         self,
         run_dir: Path,
@@ -1146,7 +1219,7 @@ class WorkflowService:
                     status="blocked",
                     reason=reason,
                 )
-            reason = f"Awaiting operator approval for `{review_stage}` before running `{target_stage}`."
+            reason = _review_reason(review_stage, target_stage=target_stage)
             return self._review_gate_result(
                 run_dir,
                 review_stage=review_stage,
@@ -1300,6 +1373,84 @@ class WorkflowService:
                 changed = True
             if artifact_path.exists():
                 latest_succeeded_stage = stage
+
+        latest_review_gate: tuple[ReviewStage, StageStatus, str] | None = None
+        for review_stage in REVIEW_STAGE_ORDER:
+            checkpoint_stage = REVIEW_CHECKPOINT_STAGE[review_stage]
+            checkpoint_state = state.stages.get(checkpoint_stage)
+            artifact_path = self.canonical_stage_artifact_path(run_dir, checkpoint_stage)
+            if checkpoint_state is None or not artifact_path.exists():
+                continue
+            review = reviews.reviews.get(review_stage)
+            review_status = review.status if review is not None else "pending"
+            if review_status == "approved":
+                continue
+            if review_status == "rejected":
+                detail = f" Notes: {review.notes.strip()}" if review is not None and review.notes.strip() else ""
+                latest_review_gate = (
+                    review_stage,
+                    "blocked",
+                    f"Review `{review_stage}` is rejected. Update artifacts or change the review before continuing.{detail}",
+                )
+            else:
+                latest_review_gate = (review_stage, "awaiting_approval", _review_reason(review_stage))
+
+        if latest_review_gate is None and state.awaiting_approval_stage:
+            checkpoint_stage = state.awaiting_approval_stage
+            review_stage = CHECKPOINT_REVIEW_STAGE.get(checkpoint_stage)
+            checkpoint_state = state.stages.get(checkpoint_stage)
+            if review_stage is not None and checkpoint_state is not None:
+                review = reviews.reviews.get(review_stage)
+                review_status = review.status if review is not None else "pending"
+                if review_status == "rejected":
+                    detail = f" Notes: {review.notes.strip()}" if review is not None and review.notes.strip() else ""
+                    latest_review_gate = (
+                        review_stage,
+                        "blocked",
+                        f"Review `{review_stage}` is rejected. Update artifacts or change the review before continuing.{detail}",
+                    )
+                elif review_status != "approved":
+                    latest_review_gate = (review_stage, "awaiting_approval", _review_reason(review_stage))
+
+        if latest_review_gate is not None:
+            review_stage, desired_status, reason = latest_review_gate
+            checkpoint_stage = REVIEW_CHECKPOINT_STAGE[review_stage]
+            checkpoint_state = state.stages.get(checkpoint_stage)
+            if checkpoint_state is not None:
+                if checkpoint_state.status != desired_status:
+                    checkpoint_state.status = desired_status
+                    changed = True
+                if checkpoint_state.message != reason:
+                    checkpoint_state.message = reason
+                    changed = True
+                resolved_artifact = str(self.canonical_stage_artifact_path(run_dir, checkpoint_stage).resolve())
+                if checkpoint_state.artifact_path != resolved_artifact:
+                    checkpoint_state.artifact_path = resolved_artifact
+                    changed = True
+            desired_run_status: RunStatus = "blocked" if desired_status == "blocked" else "awaiting_approval"
+            if state.status != desired_run_status:
+                state.status = desired_run_status
+                changed = True
+            if state.current_stage != checkpoint_stage:
+                state.current_stage = checkpoint_stage
+                changed = True
+            desired_approval_stage = "" if desired_run_status == "blocked" else checkpoint_stage
+            if state.awaiting_approval_stage != desired_approval_stage:
+                state.awaiting_approval_stage = desired_approval_stage
+                changed = True
+            if state.last_error != reason:
+                state.last_error = reason
+                changed = True
+        else:
+            if state.awaiting_approval_stage:
+                state.awaiting_approval_stage = ""
+                changed = True
+            if state.status == "awaiting_approval":
+                state.status = self._active_run_status(run_dir)
+                changed = True
+            if state.status != "blocked" and state.last_error:
+                state.last_error = ""
+                changed = True
 
         if (run_dir / "10_final" / "final_video.mp4").exists():
             if state.status != "succeeded":
@@ -2379,6 +2530,7 @@ class WorkflowService:
         effective_source_name = str(start_result.get("source_script_name", "")).strip() or self.load_source_script_name(
             resolved_run_dir
         )
+        continue_plan = self.plan_continue_run(resolved_run_dir, source_script_name=effective_source_name)
 
         def emit_stage_progress(stage_name: str, message: str | None = None) -> None:
             if progress_callback is None:
@@ -2392,7 +2544,33 @@ class WorkflowService:
                 }
             )
 
-        if parallel_planning:
+        if continue_plan["status"] == "awaiting_approval":
+            return self._review_gate_result(
+                resolved_run_dir,
+                review_stage=continue_plan["review_stage"],
+                source_script_name=effective_source_name,
+                target_stage=continue_plan["stage"],
+                status="awaiting_approval",
+                reason=continue_plan["reason"],
+            )
+        if continue_plan["status"] == "blocked":
+            return self._result(
+                status="blocked",
+                run_dir=resolved_run_dir,
+                stage=str(continue_plan["stage"]),
+                reason=str(continue_plan["reason"]),
+                extra={"review_stage": continue_plan.get("review_stage", "")},
+            )
+        if continue_plan["status"] == "completed":
+            return {
+                "status": "ok",
+                "stage": "mainline_workflow_completed",
+                "run_dir": str(resolved_run_dir),
+                "artifacts": self.artifact_snapshot(resolved_run_dir),
+                "run_state": self.inspect_run(resolved_run_dir)["run_state"],
+            }
+
+        if parallel_planning and continue_plan["stage"] == "asset_extraction":
             emit_stage_progress("asset_extraction", "正在并行执行资产抽取与预规划镜头。")
             parallel_result = self.run_parallel_planning(run_dir=resolved_run_dir, source_script_name=effective_source_name)
             if parallel_result.get("status") != "ok":
@@ -2409,9 +2587,10 @@ class WorkflowService:
                 "final_video",
             )
         else:
-            remaining_stages = CORE_STAGE_ORDER[1:]
+            start_index = CORE_STAGE_ORDER.index(str(continue_plan["stage"]))
+            remaining_stages = CORE_STAGE_ORDER[start_index:]
 
-        if include_storyboard_seed and not parallel_planning:
+        if include_storyboard_seed and not parallel_planning and str(continue_plan["stage"]) == "asset_extraction":
             emit_stage_progress("storyboard_seed")
             seed_result = self.run_stage("storyboard_seed", run_dir=resolved_run_dir, source_script_name=effective_source_name)
             if seed_result.get("status") != "ok":
@@ -2448,12 +2627,13 @@ class WorkflowService:
             if checkpoint_review is not None:
                 review_status = ensure_reviews(resolved_run_dir).reviews[checkpoint_review].status
                 if review_status != "approved":
-                    return self._result(
+                    return self._review_gate_result(
+                        resolved_run_dir,
+                        review_stage=checkpoint_review,
+                        source_script_name=effective_source_name,
+                        target_stage=stage,  # type: ignore[arg-type]
                         status="awaiting_approval",
-                        run_dir=resolved_run_dir,
-                        stage=stage,
-                        reason=f"Awaiting operator approval for `{checkpoint_review}` before continuing.",
-                        extra={"review_stage": checkpoint_review},
+                        reason=_review_reason(checkpoint_review),
                     )
 
         return {

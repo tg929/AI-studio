@@ -909,6 +909,13 @@ def build_console_html() -> str:
     let storyboardSelectedShotId = '';
     let shotVideoFilter = 'all';
 
+    function setDetailActionStatus(message, isError = false) {
+      const root = document.getElementById('detail_action_status');
+      if (!root) return;
+      root.textContent = message || '';
+      root.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+    }
+
     async function api(path, options = {}) {
       const response = await fetch(path, {
         headers: {'Content-Type': 'application/json'},
@@ -1804,11 +1811,20 @@ def build_console_html() -> str:
       if (!selectedRunId) return;
       const reviewer = document.getElementById(`reviewer_${stage}`)?.value || '';
       const notes = document.getElementById(`notes_${stage}`)?.value || '';
-      await api(`/api/runs/${selectedRunId}/reviews/${stage}`, {
-        method: 'POST',
-        body: JSON.stringify({status, reviewer, notes, metadata: {source: 'console'}}),
-      });
-      await loadRunDetail(selectedRunId);
+      setDetailActionStatus('正在提交确认结果...');
+      try {
+        const result = await api(`/api/runs/${selectedRunId}/reviews/${stage}`, {
+          method: 'POST',
+          body: JSON.stringify({status, reviewer, notes, metadata: {source: 'console'}}),
+        });
+        const reviewStatus = result?.reviews?.reviews?.[stage]?.status || status;
+        const nextHint = reviewStatus === 'approved' ? '确认已保存。如需继续生成，请点击“继续执行”。' : '确认结果已保存。';
+        setDetailActionStatus(`${humanizeReviewStage(stage)}已更新为${humanizeStatus(reviewStatus)}。${nextHint}`);
+        await loadRuns();
+        await loadRunDetail(selectedRunId);
+      } catch (error) {
+        setDetailActionStatus(`确认提交失败：${error.message}`, true);
+      }
     }
 
     async function loadRuns() {
@@ -1888,25 +1904,37 @@ def build_console_html() -> str:
 
     async function continueRun() {
       if (!selectedRunId) return;
-      const result = await api(`/api/runs/${selectedRunId}/continue`, {
-        method: 'POST',
-        body: JSON.stringify({parallel_planning: false}),
-      });
-      activeTaskId = result.task_id || '';
-      activeRunId = selectedRunId;
-      await loadRightPanel();
+      setDetailActionStatus('正在提交继续执行...');
+      try {
+        const result = await api(`/api/runs/${selectedRunId}/continue`, {
+          method: 'POST',
+          body: JSON.stringify({parallel_planning: false}),
+        });
+        setDetailActionStatus('继续执行任务已提交。');
+        activeTaskId = result.task_id || '';
+        activeRunId = selectedRunId;
+        await loadRightPanel();
+      } catch (error) {
+        setDetailActionStatus(`继续执行失败：${error.message}`, true);
+      }
     }
 
     async function rerunStage() {
       if (!selectedRunId) return;
       const stage = document.getElementById('rerun_stage').value;
-      const result = await api(`/api/runs/${selectedRunId}/rerun-stage/${stage}`, {
-        method: 'POST',
-        body: JSON.stringify({force: true}),
-      });
-      activeTaskId = result.task_id || '';
-      activeRunId = selectedRunId;
-      await loadRightPanel();
+      setDetailActionStatus('正在提交重跑请求...');
+      try {
+        const result = await api(`/api/runs/${selectedRunId}/rerun-stage/${stage}`, {
+          method: 'POST',
+          body: JSON.stringify({force: true}),
+        });
+        setDetailActionStatus('重跑任务已提交。');
+        activeTaskId = result.task_id || '';
+        activeRunId = selectedRunId;
+        await loadRightPanel();
+      } catch (error) {
+        setDetailActionStatus(`重跑提交失败：${error.message}`, true);
+      }
     }
 
     async function loadActiveTaskPanel(taskId, options = {}) {
@@ -1996,6 +2024,7 @@ def build_console_html() -> str:
             </div>
           </div>
           <div class="detail-actions">
+            <div id="detail_action_status" class="muted"></div>
             <button class="secondary" onclick="loadRunDetail('${runId}')">刷新当前页</button>
             <button class="ghost" onclick="continueRun()">继续执行</button>
             <select id="rerun_stage">
