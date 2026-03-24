@@ -393,6 +393,12 @@ class WorkflowReviewGateTests(unittest.TestCase):
         self.assertEqual(run_state["current_stage"], "asset_images")
         self.assertEqual(run_state["stages"]["asset_images"]["status"], "awaiting_approval")
 
+    def test_build_stage_preview_does_not_claim_future_stage_outputs_before_artifacts_exist(self) -> None:
+        preview = self.service.build_stage_preview(self.run_dir, "style_bible")
+
+        self.assertEqual(preview["preview_headline"], "")
+        self.assertEqual(preview["preview_text"], "")
+
     def test_plan_continue_run_retries_blocked_board_publish_instead_of_skipping_to_video_jobs(self) -> None:
         script_clean_path = self.run_dir / "01_input" / "script_clean.txt"
         asset_images_path = self.run_dir / "05_asset_images" / "asset_images_manifest.json"
@@ -990,6 +996,10 @@ class OperatorConsoleHtmlTests(unittest.TestCase):
         self.assertIn("继续执行失败：", html)
         self.assertIn("function formatLocalTimestamp(value)", html)
         self.assertIn("renderStageTime(stage)", html)
+        self.assertIn("function resolveReviewDisplay(stage, runState, reviewPayload)", html)
+        self.assertIn("完整剧本已生成，等待人工确认", html)
+        self.assertIn("扩写后的完整剧本", html)
+        self.assertIn("未到达", html)
         self.assertNotIn("${stage.updated_at || ''}", html)
         self.assertIn("window.scrollTo({top: Math.min(scrollY, maxScroll), behavior: 'auto'})", html)
 
